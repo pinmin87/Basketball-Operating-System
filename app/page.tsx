@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Users, Calendar, CheckSquare, Wallet, Plus, ArrowRight } from 'lucide-react';
+import { Users, Calendar, CheckSquare, Wallet, Plus } from 'lucide-react';
 
 export default function DashboardPage() {
   const [isMounted, setIsMounted] = useState(false);
@@ -48,12 +48,11 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-screen bg-gray-100 pb-32">
-      {/* 核心修复：添加 max-w-md mx-auto 让它在电脑端也保持手机的完美宽度，并加上阴影让它像一个独立设备 */}
+      {/* 居中防拉伸锁 */}
       <div className="max-w-md mx-auto bg-gray-50 min-h-screen shadow-2xl border-x border-gray-200/60 overflow-hidden relative">
         
         {/* 顶部蓝色品牌区 */}
         <header className="bg-blue-600 text-white p-6 pt-safe rounded-b-[2.5rem] shadow-md relative overflow-hidden">
-          {/* 背景装饰 */}
           <div className="absolute top-[-50%] right-[-10%] w-64 h-64 bg-blue-500 rounded-full mix-blend-multiply filter blur-2xl opacity-60 pointer-events-none"></div>
           
           <div className="flex justify-between items-center mb-6 relative z-10">
@@ -66,7 +65,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* 核心数据卡片 */}
           <div className="grid grid-cols-2 gap-3 relative z-10">
             <div className="bg-blue-700/40 p-4 rounded-2xl border border-blue-500/30 backdrop-blur-md">
               <p className="text-[10px] font-black uppercase tracking-wider text-blue-200 mb-1">Total Players</p>
@@ -89,14 +87,12 @@ export default function DashboardPage() {
         <div className="p-5 space-y-5 relative z-10 mt-[-10px]">
           
           {/* 财务看板概览 */}
-          <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 hover:border-blue-100 transition-colors">
+          <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-black text-gray-900 text-sm uppercase tracking-wider flex items-center">
                 <Wallet size={16} className="text-blue-600 mr-2" /> August 2026 Fees
               </h3>
-              <Link href="/fees" className="text-[11px] font-bold text-blue-600 flex items-center bg-blue-50 px-2.5 py-1 rounded-lg hover:bg-blue-100 transition-colors">
-                Manage <ArrowRight size={12} className="ml-1" />
-              </Link>
+              {/* 删除了 Manage 按钮，保持看板清爽 */}
             </div>
             <div className="grid grid-cols-2 gap-4 pt-3 border-t border-gray-50/80">
               <div>
@@ -111,14 +107,12 @@ export default function DashboardPage() {
           </div>
 
           {/* 今日考勤概览 */}
-          <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 hover:border-blue-100 transition-colors">
+          <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-black text-gray-900 text-sm uppercase tracking-wider flex items-center">
                 <CheckSquare size={16} className="text-blue-600 mr-2" /> Today's Attendance
               </h3>
-              <Link href="/attendance" className="text-[11px] font-bold text-blue-600 flex items-center bg-blue-50 px-2.5 py-1 rounded-lg hover:bg-blue-100 transition-colors">
-                Take Roll <ArrowRight size={12} className="ml-1" />
-              </Link>
+              {/* 删除了 Take Roll 按钮，保持看板清爽 */}
             </div>
             <div className="grid grid-cols-3 gap-2.5 pt-3 border-t border-gray-50/80 text-center">
               <div className="bg-green-50 p-3 rounded-2xl border border-green-100/50">
