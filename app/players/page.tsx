@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Search, Plus, User, Phone, ShieldCheck, X, Edit3, Wallet, CalendarDays, Clock, CheckCircle2, XCircle, History } from 'lucide-react';
+import { Search, Plus, User, Phone, X, Edit3, Wallet, Clock, CheckCircle2, XCircle, History, Mail, MapPin, Calendar as CalendarIcon } from 'lucide-react';
 
 const formatTime = (time24: string) => {
   if (!time24) return '';
@@ -12,22 +12,21 @@ const formatTime = (time24: string) => {
   return `${hour % 12 || 12}:${minute} ${ampm}`;
 };
 
-const DEFAULT_PLAYER = { name: '', parentName: '', parentPhone: '', status: 'ACTIVE' };
+// 恢复了完整的 Player 资料结构
+const DEFAULT_PLAYER = { name: '', gender: 'Male', dob: '', parentName: '', parentPhone: '', email: '', address: '', status: 'ACTIVE' };
 
 function PlayersContent() {
   const searchParams = useSearchParams();
   const [isMounted, setIsMounted] = useState(false);
   const [players, setPlayers] = useState<any[]>([]);
   const [academyClasses, setAcademyClasses] = useState<any[]>([]);
-  
-  // 恢复读取全局出勤率
   const [attendances, setAttendances] = useState<any[]>([]);
 
   useEffect(() => {
     setIsMounted(true);
     const savedPlayers = localStorage.getItem('academy_players');
     if (savedPlayers) { try { setPlayers(JSON.parse(savedPlayers)); } catch(e){} } 
-    else { setPlayers([{ id: 'p1', name: 'Ahmad bin Ali', parentName: 'Ali Bin Abu', parentPhone: '012-3456789', status: 'ACTIVE' }]); }
+    else { setPlayers([{ id: 'p1', name: 'Ahmad bin Ali', gender: 'Male', dob: '2014-05-12', parentName: 'Ali Bin Abu', parentPhone: '012-3456789', email: 'ali@example.com', address: 'Johor Bahru', status: 'ACTIVE' }]); }
     
     const savedClasses = localStorage.getItem('academy_classes');
     if (savedClasses) try { setAcademyClasses(JSON.parse(savedClasses)); } catch(e){}
@@ -53,7 +52,7 @@ function PlayersContent() {
   const openProfileModal = (player: any) => { setEditingId(player.id); setPlayerForm({ ...player }); setActiveTab('PROFILE'); setIsModalOpen(true); };
 
   const handleSavePlayer = () => {
-    if (!playerForm.name || !playerForm.parentName || !playerForm.parentPhone) return alert('Required fields missing!');
+    if (!playerForm.name || !playerForm.parentName || !playerForm.parentPhone) return alert('Name and Parent Phone are required!');
     if (editingId) setPlayers(players.map(p => p.id === editingId ? { ...p, ...playerForm } : p));
     else setPlayers([{ id: `p${Date.now()}`, ...playerForm, status: 'ACTIVE' }, ...players]);
     setIsModalOpen(false);
@@ -62,7 +61,6 @@ function PlayersContent() {
   const playerEnrolledClasses = editingId ? academyClasses.filter(c => c.enrolledPlayers?.some((p: any) => p.id === editingId)) : [];
   const totalMonthlyFee = playerEnrolledClasses.reduce((sum, cls) => sum + (Number(cls.monthlyFee) || 0), 0);
 
-  // 恢复出勤计算逻辑！
   let playerRawRecords: any[] = [];
   if (editingId) {
     attendances.forEach(att => {
@@ -94,7 +92,7 @@ function PlayersContent() {
 
   return (
     <div className="bg-gray-50 min-h-full pb-10">
-      <header className="bg-blue-600 text-white p-4 pt-safe pb-6 rounded-b-[2.5rem] shadow-sm sticky top-0 z-10">
+      <header className="bg-blue-600 text-white p-4 pt-safe pb-6 rounded-b-[2.5rem] shadow-md sticky top-0 z-10">
         <div className="flex justify-between items-center mb-4 mt-2">
           <h1 className="text-2xl font-black">Players</h1>
           <button onClick={() => { setEditingId(null); setPlayerForm(DEFAULT_PLAYER); setActiveTab('PROFILE'); setIsModalOpen(true); }} className="bg-white text-blue-600 font-bold px-4 py-2 rounded-xl text-sm flex items-center space-x-1 shadow-sm active:scale-95 transition-all"><Plus size={16} /><span>Add Student</span></button>
@@ -144,12 +142,34 @@ function PlayersContent() {
             <div className="p-6 overflow-y-auto flex-1 bg-gray-50/50 space-y-6 pb-32">
               {activeTab === 'PROFILE' && (
                 <div className="space-y-4 animate-in fade-in">
+                  
+                  {/* 恢复了基础资料：名字、性别、生日 */}
                   <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-5">
+                    <h4 className="text-[11px] font-black text-blue-600 uppercase tracking-widest border-b border-gray-50 pb-2">Student Info</h4>
                     <div><label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Student Name <span className="text-red-500">*</span></label><input type="text" value={playerForm.name} onChange={(e) => setPlayerForm({...playerForm, name: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 font-bold text-[16px] text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" /></div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Gender</label>
+                        <select value={playerForm.gender} onChange={(e) => setPlayerForm({...playerForm, gender: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 font-bold text-[16px] text-gray-900 outline-none appearance-none">
+                          <option value="Male">Male</option><option value="Female">Female</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Date of Birth</label>
+                        <input type="date" value={playerForm.dob} onChange={(e) => setPlayerForm({...playerForm, dob: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 font-bold text-[16px] text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 恢复了家长资料：名字、电话、邮箱、地址 */}
+                  <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-5">
+                    <h4 className="text-[11px] font-black text-blue-600 uppercase tracking-widest border-b border-gray-50 pb-2">Guardian Contact</h4>
                     <div className="grid grid-cols-2 gap-4">
                       <div><label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Parent Name <span className="text-red-500">*</span></label><input type="text" value={playerForm.parentName} onChange={(e) => setPlayerForm({...playerForm, parentName: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 font-bold text-[16px] text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" /></div>
                       <div><label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Parent Phone <span className="text-red-500">*</span></label><input type="tel" value={playerForm.parentPhone} onChange={(e) => setPlayerForm({...playerForm, parentPhone: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 font-bold text-[16px] text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" /></div>
                     </div>
+                    <div><label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 flex items-center"><Mail size={12} className="mr-1"/> Email</label><input type="email" placeholder="Optional" value={playerForm.email} onChange={(e) => setPlayerForm({...playerForm, email: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 font-bold text-[16px] text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" /></div>
+                    <div><label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 flex items-center"><MapPin size={12} className="mr-1"/> Home Address</label><textarea rows={2} placeholder="Optional" value={playerForm.address} onChange={(e) => setPlayerForm({...playerForm, address: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 font-bold text-[16px] text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" /></div>
                   </div>
                 </div>
               )}
@@ -166,7 +186,6 @@ function PlayersContent() {
                 </div>
               )}
 
-              {/* 完美恢复 Attendance 统计面板 */}
               {activeTab === 'ATTENDANCE' && (
                 <div className="space-y-5 animate-in fade-in">
                   <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 text-center relative">
@@ -198,7 +217,7 @@ function PlayersContent() {
 
             <div className="p-6 pb-12 border-t border-gray-100 shrink-0 bg-white">
               <button onClick={handleSavePlayer} className="w-full bg-blue-600 text-white font-black text-lg py-4 rounded-2xl active:bg-blue-700 shadow-md">
-                {editingId ? 'Save Changes' : 'Confirm & Save Player'}
+                {editingId ? 'Save Changes' : 'Confirm & Save'}
               </button>
             </div>
           </div>

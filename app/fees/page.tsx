@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, ChevronLeft, ChevronRight, CheckCircle2, AlertCircle, UploadCloud, Calendar, CreditCard, Banknote, Edit3, Receipt, X, CalendarRange, Download, ShieldCheck, Filter } from 'lucide-react';
+import { Search, CheckCircle2, AlertCircle, UploadCloud, Calendar, CreditCard, Banknote, X, CalendarRange, Download, ShieldCheck, Filter } from 'lucide-react';
 
 export default function FeesPage() {
   const [isMounted, setIsMounted] = useState(false);
@@ -168,7 +168,7 @@ export default function FeesPage() {
           <div className="bg-white p-2 rounded-2xl border border-gray-200 shadow-sm flex items-center">
             <Filter size={18} className="text-blue-500 ml-3 mr-3 shrink-0" />
             <select value={selectedClassFilter} onChange={(e) => setSelectedClassFilter(e.target.value)} className="w-full bg-transparent font-bold text-[15px] text-gray-800 focus:outline-none py-2 outline-none appearance-none">
-              <option value="ALL">All Classes (所有班级)</option>
+              <option value="ALL">All Classes</option>
               {classes.map((cls: any) => (<option key={cls.id} value={cls.name}>{cls.name}</option>))}
             </select>
           </div>
@@ -269,12 +269,12 @@ export default function FeesPage() {
                 </div>
               </div>
 
-              {/* 完美恢复所有大马本地支付方式！ */}
+              {/* 去掉了中文，只保留纯正英文名称 */}
               <div>
                 <label className="block text-[11px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Payment Method</label>
                 <select value={paymentMethod} onChange={e=>setPaymentMethod(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-4 font-bold text-[16px] text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none appearance-none">
-                  <option value="Bank Transfer">Bank Transfer (银行转账)</option>
-                  <option value="Cash">Cash (现金)</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Cash">Cash</option>
                   <option value="Touch n Go">Touch 'n Go eWallet</option>
                   <option value="DuitNow">DuitNow QR</option>
                   <option value="Card">Credit/Debit Card</option>

@@ -166,7 +166,7 @@ function ClassesContent() {
                 <h4 className="text-xs font-black text-blue-600 uppercase tracking-wider mb-3 flex items-center"><UserPlus size={16} className="mr-1.5" /> Add from Database</h4>
                 <div className="relative mb-4">
                   <Search size={18} className="absolute left-4 top-3.5 text-gray-400" />
-                  <input type="text" placeholder="Search by name or phone..." value={playerSearch} onChange={(e) => setPlayerSearch(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-2xl pl-11 pr-4 py-3.5 text-[16px] font-medium focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <input type="text" placeholder="Search by name or phone..." value={playerSearch} onChange={(e) => setPlayerSearch(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-11 pr-4 py-3.5 text-[16px] font-medium focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div className="space-y-3">
                   {availablePlayers.length === 0 ? (
@@ -194,7 +194,6 @@ function ClassesContent() {
                     <button onClick={() => setIsModalOpen(false)} className="bg-white text-gray-400 rounded-full p-2.5 border border-gray-200 active:bg-gray-100"><X size={20} /></button>
                  </div>
                  
-                 {/* 确保能滚动到底部 */}
                  <div className="p-6 overflow-y-auto flex-1 space-y-5 pb-32">
                     <div>
                       <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Class Name <span className="text-red-500">*</span></label>
@@ -235,7 +234,6 @@ function ClassesContent() {
                         </div>
                       ))}
                       
-                      {/* 这里就是您心心念念的 Add Another Session 按钮，保证绝对可见！ */}
                       <button onClick={addSchedule} className="w-full bg-blue-100 text-blue-700 font-black py-4 rounded-2xl text-sm flex items-center justify-center active:bg-blue-200 transition-colors">
                         <Plus size={18} className="mr-1.5" /> Add Another Session
                       </button>
