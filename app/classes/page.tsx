@@ -48,10 +48,11 @@ function ClassesContent() {
     setIsModalOpen(false);
   };
 
-  const addSchedule = () => setClassForm({ ...classForm, schedules: [...classForm.schedules, { day: 'Sunday', startTime: '09:00', endTime: '11:00' }] });
-  const removeSchedule = (idx: number) => setClassForm({ ...classForm, schedules: classForm.schedules.filter((_:any, i:number) => i !== idx) });
+  // 修复旧数据没有 schedules 导致的卡死 Bug
+  const addSchedule = () => setClassForm({ ...classForm, schedules: [...(classForm.schedules || []), { day: 'Sunday', startTime: '09:00', endTime: '11:00' }] });
+  const removeSchedule = (idx: number) => setClassForm({ ...classForm, schedules: (classForm.schedules || []).filter((_:any, i:number) => i !== idx) });
   const updateSchedule = (idx: number, field: string, value: string) => {
-    const newSchedules = [...classForm.schedules];
+    const newSchedules = [...(classForm.schedules || [])];
     newSchedules[idx][field] = value;
     setClassForm({ ...classForm, schedules: newSchedules });
   };
@@ -124,13 +125,14 @@ function ClassesContent() {
               </div>
               <div className="mb-5 bg-gray-50 p-4 rounded-2xl border border-gray-100/50 space-y-2">
                 <div className="flex items-center text-sm text-gray-700 font-bold mb-2"><MapPin size={16} className="mr-2 text-blue-500" />{cls.venue || 'TBA'}</div>
-                {cls.schedules?.map((sch: any, idx: number) => (
+                {(cls.schedules || []).map((sch: any, idx: number) => (
                   <div key={idx} className="flex items-center text-sm text-gray-700 font-bold bg-white p-2 rounded-lg border border-gray-100"><Calendar size={14} className="mr-2 text-blue-500" /> <span className="w-24">{sch.day}</span><Clock size={14} className="mr-2 ml-2 text-blue-500" /> {formatTime(sch.startTime)} - {formatTime(sch.endTime)}</div>
                 ))}
               </div>
               <div className="flex space-x-3">
                 <button onClick={() => openManagePlayers(cls)} className="flex-1 bg-blue-50 text-blue-700 font-black py-3.5 rounded-xl text-sm flex justify-center items-center active:bg-blue-100 transition-colors"><Users size={18} className="mr-2" />Manage Players ({cls.enrolledPlayers?.length || 0})</button>
-                <button onClick={() => { setEditingId(cls.id); setClassForm(cls); setIsModalOpen(true); }} className="px-5 bg-gray-50 text-gray-600 font-bold rounded-xl text-sm active:bg-gray-100 border border-gray-200">Edit</button>
+                {/* 修复：点击 Edit 时，如果旧数据没 schedules，自动生成默认的 */}
+                <button onClick={() => { setEditingId(cls.id); setClassForm({ ...cls, schedules: cls.schedules || [{ day: 'Saturday', startTime: '09:00', endTime: '11:00' }] }); setIsModalOpen(true); }} className="px-5 bg-gray-50 text-gray-600 font-bold rounded-xl text-sm active:bg-gray-100 border border-gray-200">Edit</button>
               </div>
             </div>
           ))
@@ -142,7 +144,7 @@ function ClassesContent() {
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] shadow-2xl flex flex-col h-[85vh] animate-in slide-in-from-bottom-5">
             <div className="p-6 border-b border-gray-100 shrink-0 flex justify-between items-center bg-gray-50 rounded-t-[2.5rem]">
               <div><h3 className="font-black text-xl text-gray-900">{selectedClass.name}</h3><p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mt-1">Manage Enrolled Players</p></div>
-              <button onClick={() => setIsManagePlayersOpen(false)} className="bg-white text-gray-400 rounded-full p-2.5 border border-gray-200 active:bg-gray-100"><X size={20} /></button>
+              <button type="button" onClick={() => setIsManagePlayersOpen(false)} className="bg-white text-gray-400 rounded-full p-2.5 border border-gray-200 active:bg-gray-100"><X size={20} /></button>
             </div>
             
             <div className="flex-1 overflow-y-auto p-6 bg-white pb-32">
@@ -155,7 +157,7 @@ function ClassesContent() {
                     selectedClass.enrolledPlayers.map((ep: any) => (
                       <div key={ep.id} className="flex justify-between items-center p-4 bg-white rounded-2xl border border-gray-100 shadow-sm">
                         <div className="flex items-center"><div className="bg-blue-100 p-2 rounded-full mr-3"><CheckCircle2 size={18} className="text-blue-600" /></div><div><p className="text-base font-bold text-gray-900">{ep.name}</p></div></div>
-                        <button onClick={() => handleRemovePlayerFromClass(ep.id)} className="text-red-400 p-2.5 hover:bg-red-50 rounded-full transition-colors active:scale-95"><Trash2 size={20} /></button>
+                        <button type="button" onClick={() => handleRemovePlayerFromClass(ep.id)} className="text-red-400 p-2.5 hover:bg-red-50 rounded-full transition-colors active:scale-95"><Trash2 size={20} /></button>
                       </div>
                     ))
                   )}
@@ -175,7 +177,7 @@ function ClassesContent() {
                     availablePlayers.map(player => (
                       <div key={player.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-2xl border border-gray-100 active:border-blue-200 transition-colors">
                         <div><p className="text-base font-bold text-gray-900">{player.name}</p><p className="text-[11px] text-gray-500 font-bold mt-1">{player.parentPhone}</p></div>
-                        <button onClick={() => handleAddPlayerToClass(player)} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-black active:bg-blue-700 active:scale-95 shadow-sm">Add</button>
+                        <button type="button" onClick={() => handleAddPlayerToClass(player)} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-black active:bg-blue-700 active:scale-95 shadow-sm">Add</button>
                       </div>
                     ))
                   )}
@@ -191,7 +193,7 @@ function ClassesContent() {
              <div className="bg-white w-full max-w-md rounded-t-[2.5rem] shadow-2xl flex flex-col h-[90vh] animate-in slide-in-from-bottom-5">
                  <div className="p-6 border-b border-gray-100 shrink-0 flex justify-between items-center bg-gray-50 rounded-t-[2.5rem]">
                     <h3 className="font-black text-2xl text-gray-900">{editingId ? 'Edit Class' : 'Create Class'}</h3>
-                    <button onClick={() => setIsModalOpen(false)} className="bg-white text-gray-400 rounded-full p-2.5 border border-gray-200 active:bg-gray-100"><X size={20} /></button>
+                    <button type="button" onClick={() => setIsModalOpen(false)} className="bg-white text-gray-400 rounded-full p-2.5 border border-gray-200 active:bg-gray-100"><X size={20} /></button>
                  </div>
                  
                  <div className="p-6 overflow-y-auto flex-1 space-y-5 pb-32">
@@ -221,9 +223,9 @@ function ClassesContent() {
                     <div className="bg-blue-50 p-5 rounded-3xl border border-blue-100 space-y-4">
                       <div className="flex justify-between items-center mb-1"><label className="block text-[11px] font-black text-blue-600 uppercase tracking-widest ml-1">Training Schedule</label></div>
                       
-                      {classForm.schedules?.map((sch: any, index: number) => (
+                      {(classForm.schedules || []).map((sch: any, index: number) => (
                         <div key={index} className="bg-white p-4 rounded-2xl border border-blue-200 relative">
-                           {classForm.schedules.length > 1 && (<button onClick={() => removeSchedule(index)} className="absolute -top-2 -right-2 bg-red-100 text-red-500 rounded-full p-1"><MinusCircle size={18} /></button>)}
+                           {(classForm.schedules || []).length > 1 && (<button type="button" onClick={() => removeSchedule(index)} className="absolute -top-2 -right-2 bg-red-100 text-red-500 rounded-full p-1"><MinusCircle size={18} /></button>)}
                            <select value={sch.day} onChange={e=>updateSchedule(index, 'day', e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-bold text-[16px] text-gray-800 mb-3 outline-none appearance-none">
                              <option value="Monday">Monday</option><option value="Tuesday">Tuesday</option><option value="Wednesday">Wednesday</option><option value="Thursday">Thursday</option><option value="Friday">Friday</option><option value="Saturday">Saturday</option><option value="Sunday">Sunday</option>
                            </select>
@@ -234,14 +236,14 @@ function ClassesContent() {
                         </div>
                       ))}
                       
-                      <button onClick={addSchedule} className="w-full bg-blue-100 text-blue-700 font-black py-4 rounded-2xl text-sm flex items-center justify-center active:bg-blue-200 transition-colors">
+                      <button type="button" onClick={addSchedule} className="w-full bg-blue-100 text-blue-700 font-black py-4 rounded-2xl text-sm flex items-center justify-center active:bg-blue-200 transition-colors">
                         <Plus size={18} className="mr-1.5" /> Add Another Session
                       </button>
                     </div>
                  </div>
 
                  <div className="p-6 pb-12 border-t border-gray-100 shrink-0 bg-white shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
-                     <button onClick={handleSaveClass} className="w-full bg-blue-600 text-white font-black text-lg py-4 rounded-2xl active:bg-blue-700 active:scale-95 transition-all shadow-md">Save Class</button>
+                     <button type="button" onClick={handleSaveClass} className="w-full bg-blue-600 text-white font-black text-lg py-4 rounded-2xl active:bg-blue-700 active:scale-95 transition-all shadow-md">Save Class</button>
                  </div>
              </div>
          </div>

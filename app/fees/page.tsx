@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Search, CheckCircle2, AlertCircle, UploadCloud, Calendar, CreditCard, Banknote, X, CalendarRange, Download, ShieldCheck, Filter } from 'lucide-react';
+import { useState, useEffect, Suspense } from 'react';
+import { Search, CheckCircle2, AlertCircle, UploadCloud, Calendar, X, CalendarRange, Download, ShieldCheck, Filter } from 'lucide-react';
 
 export default function FeesPage() {
   const [isMounted, setIsMounted] = useState(false);
@@ -97,7 +97,6 @@ export default function FeesPage() {
     setFeeRecords(feeRecords.map(record => {
       if (record.id === selectedRecord.id) {
         const cappedPaid = amountEntered > record.monthlyFee ? record.monthlyFee : amountEntered;
-        const newBalance = record.monthlyFee - cappedPaid;
         let newStatus = 'UNPAID';
         if (cappedPaid >= record.monthlyFee) newStatus = 'PAID';
         else if (cappedPaid > 0) newStatus = 'PARTIAL';
@@ -115,44 +114,22 @@ export default function FeesPage() {
 
   return (
     <div className="bg-gray-50 min-h-full pb-10 print:bg-white print:pb-0 print:p-8">
-      
-      <style dangerouslySetInnerHTML={{ __html: `
-        @media print {
-          @page { size: A4; margin: 20mm; }
-          .no-print { display: none !important; }
-          .print-only { display: block !important; }
-          body { background: white; -webkit-print-color-adjust: exact; }
-          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-          th, td { border: 1px solid #e2e8f0; padding: 12px 16px; text-align: left; font-size: 14px; }
-          th { background-color: #f8fafc; font-weight: bold; color: #475569; text-transform: uppercase; font-size: 12px; }
-        }
-      `}} />
+      <style dangerouslySetInnerHTML={{ __html: `@media print { @page { size: A4; margin: 20mm; } .no-print { display: none !important; } .print-only { display: block !important; } body { background: white; -webkit-print-color-adjust: exact; } table { width: 100%; border-collapse: collapse; margin-top: 20px; } th, td { border: 1px solid #e2e8f0; padding: 12px 16px; text-align: left; font-size: 14px; } th { background-color: #f8fafc; font-weight: bold; color: #475569; text-transform: uppercase; font-size: 12px; } }`}} />
 
       <header className="bg-blue-600 text-white pt-safe rounded-b-[2.5rem] shadow-md relative overflow-hidden no-print">
         <div className="absolute inset-0 bg-blue-700/20 pointer-events-none"></div>
         <div className="p-6 relative z-10 pt-8">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-black">Fees Collection</h1>
-            <button onClick={() => window.print()} className="flex items-center space-x-1 text-xs font-bold bg-white text-blue-600 px-3 py-2 rounded-xl shadow-sm active:scale-95">
-              <Download size={14} /><span>Export PDF</span>
-            </button>
+            <button onClick={() => window.print()} className="flex items-center space-x-1 text-xs font-bold bg-white text-blue-600 px-3 py-2 rounded-xl shadow-sm active:scale-95"><Download size={14} /><span>Export PDF</span></button>
           </div>
 
           <div className="bg-blue-700/40 p-5 rounded-[1.5rem] border border-blue-500/50 backdrop-blur-sm">
             <div className="flex justify-between items-end mb-3">
-              <div>
-                <p className="text-[11px] font-black uppercase tracking-widest text-blue-200 mb-1">Outstanding</p>
-                <p className="text-3xl font-black">RM {totalOutstanding}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[11px] font-black uppercase tracking-widest text-blue-200 mb-1">Collected</p>
-                <p className="text-xl font-bold text-green-300">RM {totalCollected}</p>
-              </div>
+              <div><p className="text-[11px] font-black uppercase tracking-widest text-blue-200 mb-1">Outstanding</p><p className="text-3xl font-black">RM {totalOutstanding}</p></div>
+              <div className="text-right"><p className="text-[11px] font-black uppercase tracking-widest text-blue-200 mb-1">Collected</p><p className="text-xl font-bold text-green-300">RM {totalCollected}</p></div>
             </div>
-            
-            <div className="w-full bg-blue-900/50 rounded-full h-2 mt-2 overflow-hidden flex">
-              <div className="bg-green-400 h-2 rounded-full transition-all duration-1000 ease-out" style={{ width: `${collectionRate}%` }}></div>
-            </div>
+            <div className="w-full bg-blue-900/50 rounded-full h-2 mt-2 overflow-hidden flex"><div className="bg-green-400 h-2 rounded-full transition-all duration-1000 ease-out" style={{ width: `${collectionRate}%` }}></div></div>
           </div>
         </div>
       </header>
@@ -188,11 +165,7 @@ export default function FeesPage() {
         </div>
       </div>
 
-      <div className="hidden print-only mb-6">
-        <div style={{ borderBottom: '2px solid #2563eb', paddingBottom: '16px', marginBottom: '24px' }}>
-          <h1 className="text-3xl font-black text-gray-900" style={{ color: '#1e3a8a' }}>Academy Fee Report</h1>
-        </div>
-      </div>
+      <div className="hidden print-only mb-6"><div style={{ borderBottom: '2px solid #2563eb', paddingBottom: '16px', marginBottom: '24px' }}><h1 className="text-3xl font-black text-gray-900" style={{ color: '#1e3a8a' }}>Academy Fee Report</h1></div></div>
 
       <div className="p-4 space-y-4 no-print pb-24">
         {finalFilteredRecords.map((record) => {
@@ -205,19 +178,13 @@ export default function FeesPage() {
                   <p className="font-black text-gray-900 text-lg">{record.playerName}</p>
                   <p className="text-xs font-bold text-gray-500 mb-3 mt-0.5">{record.className} • Due: RM {record.monthlyFee}</p>
                   {isPaid ? (
-                    <span className="inline-flex items-center text-[10px] font-black px-2.5 py-1.5 rounded-md bg-green-50 text-green-600 border border-green-100">
-                      <CheckCircle2 size={14} className="mr-1.5" /> PAID: RM {record.amountPaid} ({record.paymentMethod})
-                    </span>
+                    <span className="inline-flex items-center text-[10px] font-black px-2.5 py-1.5 rounded-md bg-green-50 text-green-600 border border-green-100"><CheckCircle2 size={14} className="mr-1.5" /> PAID: RM {record.amountPaid} ({record.paymentMethod})</span>
                   ) : (
-                    <span className="inline-flex items-center text-[10px] font-black px-2.5 py-1.5 rounded-md bg-red-50 text-red-600 border border-red-100">
-                      <AlertCircle size={14} className="mr-1.5" /> BALANCE DUE: RM {balance}
-                    </span>
+                    <span className="inline-flex items-center text-[10px] font-black px-2.5 py-1.5 rounded-md bg-red-50 text-red-600 border border-red-100"><AlertCircle size={14} className="mr-1.5" /> BALANCE DUE: RM {balance}</span>
                   )}
                 </div>
                 <div className="ml-4 shrink-0">
-                  <button onClick={() => openPaymentModal(record)} className="text-xs font-black text-blue-600 bg-blue-50 hover:bg-blue-100 px-5 py-3 rounded-xl transition-colors border border-blue-100">
-                    {record.amountPaid > 0 ? 'Edit' : 'Record'}
-                  </button>
+                  <button onClick={() => openPaymentModal(record)} className="text-xs font-black text-blue-600 bg-blue-50 hover:bg-blue-100 px-5 py-3 rounded-xl transition-colors border border-blue-100">{record.amountPaid > 0 ? 'Edit' : 'Record'}</button>
                 </div>
               </div>
             </div>
@@ -227,14 +194,8 @@ export default function FeesPage() {
 
       <div className="hidden print-only">
         <table>
-          <thead>
-            <tr><th>Player Name</th><th>Class</th><th>Due</th><th>Paid</th><th>Balance</th><th>Status</th><th>Date</th></tr>
-          </thead>
-          <tbody>
-            {finalFilteredRecords.map((r, i) => (
-              <tr key={i}><td>{r.playerName}</td><td>{r.className}</td><td>RM {r.monthlyFee}</td><td>RM {r.amountPaid}</td><td>RM {r.monthlyFee - r.amountPaid}</td><td>{r.status}</td><td>{r.paymentDate || '-'}</td></tr>
-            ))}
-          </tbody>
+          <thead><tr><th>Player Name</th><th>Class</th><th>Due</th><th>Paid</th><th>Balance</th><th>Status</th><th>Date</th></tr></thead>
+          <tbody>{finalFilteredRecords.map((r, i) => (<tr key={i}><td>{r.playerName}</td><td>{r.className}</td><td>RM {r.monthlyFee}</td><td>RM {r.amountPaid}</td><td>RM {r.monthlyFee - r.amountPaid}</td><td>{r.status}</td><td>{r.paymentDate || '-'}</td></tr>))}</tbody>
         </table>
       </div>
 
@@ -242,13 +203,8 @@ export default function FeesPage() {
         <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[60] flex items-end justify-center">
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] shadow-2xl flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-5">
             <div className="p-6 border-b border-gray-100 shrink-0 bg-white rounded-t-[2.5rem] flex justify-between items-center">
-              <div>
-                <h3 className="font-black text-2xl text-gray-900">{selectedRecord.playerName}</h3>
-                <p className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mt-1">{selectedRecord.className}</p>
-              </div>
-              <button onClick={() => setIsModalOpen(false)} className="bg-white text-gray-400 rounded-full p-2.5 border border-gray-200 active:bg-gray-100">
-                <X size={20} />
-              </button>
+              <div><h3 className="font-black text-2xl text-gray-900">{selectedRecord.playerName}</h3><p className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mt-1">{selectedRecord.className}</p></div>
+              <button type="button" onClick={() => setIsModalOpen(false)} className="bg-white text-gray-400 rounded-full p-2.5 border border-gray-200 active:bg-gray-100"><X size={20} /></button>
             </div>
 
             <div className="p-6 overflow-y-auto flex-1 space-y-6 pb-20">
@@ -269,7 +225,7 @@ export default function FeesPage() {
                 </div>
               </div>
 
-              {/* 去掉了中文，只保留纯正英文名称 */}
+              {/* 去掉了中文，保留了纯英文 */}
               <div>
                 <label className="block text-[11px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Payment Method</label>
                 <select value={paymentMethod} onChange={e=>setPaymentMethod(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-4 font-bold text-[16px] text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none appearance-none">
@@ -281,14 +237,20 @@ export default function FeesPage() {
                 </select>
               </div>
 
+              {/* 完美恢复 Upload Receipt 的 UI 按键！ */}
               <div>
-                <label className="block text-[11px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Reference No.</label>
-                <input type="text" placeholder="e.g. REF-123456" value={receiptRef} onChange={(e) => setReceiptRef(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-4 text-[16px] font-bold focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <label className="block text-[11px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Receipt / Reference No.</label>
+                <div className="flex space-x-2">
+                  <input type="text" placeholder="e.g. REF-123456" value={receiptRef} onChange={(e) => setReceiptRef(e.target.value)} className="flex-1 bg-gray-50 border border-gray-200 rounded-2xl px-4 py-4 text-[16px] font-bold focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <button type="button" className="bg-gray-100 hover:bg-gray-200 text-gray-600 px-5 rounded-2xl flex items-center justify-center transition-colors border border-gray-200 shadow-sm" title="Upload Receipt">
+                    <UploadCloud size={24} />
+                  </button>
+                </div>
               </div>
             </div>
 
             <div className="p-6 pb-12 border-t border-gray-100 shrink-0 bg-white">
-              <button onClick={handleSavePayment} className="w-full bg-blue-600 text-white font-black text-lg py-4 rounded-2xl active:bg-blue-700 active:scale-95 transition-all shadow-[0_8px_20px_-8px_rgba(37,99,235,0.5)]">
+              <button type="button" onClick={handleSavePayment} className="w-full bg-blue-600 text-white font-black text-lg py-4 rounded-2xl active:bg-blue-700 active:scale-95 transition-all shadow-[0_8px_20px_-8px_rgba(37,99,235,0.5)]">
                 Save Payment Record
               </button>
             </div>

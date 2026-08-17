@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Search, Plus, User, Phone, X, Edit3, Wallet, Clock, CheckCircle2, XCircle, History, Mail, MapPin, Calendar as CalendarIcon } from 'lucide-react';
+import { Search, Plus, User, Phone, X, Edit3, Wallet, Clock, CheckCircle2, XCircle, History, Mail, MapPin } from 'lucide-react';
 
 const formatTime = (time24: string) => {
   if (!time24) return '';
@@ -12,7 +12,6 @@ const formatTime = (time24: string) => {
   return `${hour % 12 || 12}:${minute} ${ampm}`;
 };
 
-// 恢复了完整的 Player 资料结构
 const DEFAULT_PLAYER = { name: '', gender: 'Male', dob: '', parentName: '', parentPhone: '', email: '', address: '', status: 'ACTIVE' };
 
 function PlayersContent() {
@@ -95,11 +94,11 @@ function PlayersContent() {
       <header className="bg-blue-600 text-white p-4 pt-safe pb-6 rounded-b-[2.5rem] shadow-md sticky top-0 z-10">
         <div className="flex justify-between items-center mb-4 mt-2">
           <h1 className="text-2xl font-black">Players</h1>
-          <button onClick={() => { setEditingId(null); setPlayerForm(DEFAULT_PLAYER); setActiveTab('PROFILE'); setIsModalOpen(true); }} className="bg-white text-blue-600 font-bold px-4 py-2 rounded-xl text-sm flex items-center space-x-1 shadow-sm active:scale-95 transition-all"><Plus size={16} /><span>Add Student</span></button>
+          <button onClick={() => { setEditingId(null); setPlayerForm(DEFAULT_PLAYER); setActiveTab('PROFILE'); setIsModalOpen(true); }} className="bg-white text-blue-600 font-bold px-4 py-2 rounded-xl text-sm flex items-center space-x-1 shadow-sm active:scale-95 transition-all"><Plus size={16} /><span>Add Player</span></button>
         </div>
         <div className="relative">
           <Search size={18} className="absolute left-4 top-3.5 text-blue-200" />
-          <input type="text" placeholder="Search student or phone..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-blue-700/50 text-white placeholder-blue-200 rounded-2xl pl-11 pr-4 py-3.5 text-[16px] focus:outline-none focus:ring-2 focus:ring-white border border-blue-500/30 backdrop-blur-sm" />
+          <input type="text" placeholder="Search player or phone..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-blue-700/50 text-white placeholder-blue-200 rounded-2xl pl-11 pr-4 py-3.5 text-[16px] focus:outline-none focus:ring-2 focus:ring-white border border-blue-500/30 backdrop-blur-sm" />
         </div>
       </header>
 
@@ -142,11 +141,10 @@ function PlayersContent() {
             <div className="p-6 overflow-y-auto flex-1 bg-gray-50/50 space-y-6 pb-32">
               {activeTab === 'PROFILE' && (
                 <div className="space-y-4 animate-in fade-in">
-                  
-                  {/* 恢复了基础资料：名字、性别、生日 */}
                   <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-5">
-                    <h4 className="text-[11px] font-black text-blue-600 uppercase tracking-widest border-b border-gray-50 pb-2">Student Info</h4>
-                    <div><label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Student Name <span className="text-red-500">*</span></label><input type="text" value={playerForm.name} onChange={(e) => setPlayerForm({...playerForm, name: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 font-bold text-[16px] text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" /></div>
+                    <h4 className="text-[11px] font-black text-blue-600 uppercase tracking-widest border-b border-gray-50 pb-2">Player Info</h4>
+                    {/* 修改为 PLAYER NAME */}
+                    <div><label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Player Name <span className="text-red-500">*</span></label><input type="text" value={playerForm.name} onChange={(e) => setPlayerForm({...playerForm, name: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 font-bold text-[16px] text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" /></div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Gender</label>
@@ -161,7 +159,6 @@ function PlayersContent() {
                     </div>
                   </div>
 
-                  {/* 恢复了家长资料：名字、电话、邮箱、地址 */}
                   <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-5">
                     <h4 className="text-[11px] font-black text-blue-600 uppercase tracking-widest border-b border-gray-50 pb-2">Guardian Contact</h4>
                     <div className="grid grid-cols-2 gap-4">
@@ -216,7 +213,7 @@ function PlayersContent() {
             </div>
 
             <div className="p-6 pb-12 border-t border-gray-100 shrink-0 bg-white">
-              <button onClick={handleSavePlayer} className="w-full bg-blue-600 text-white font-black text-lg py-4 rounded-2xl active:bg-blue-700 shadow-md">
+              <button type="button" onClick={handleSavePlayer} className="w-full bg-blue-600 text-white font-black text-lg py-4 rounded-2xl active:bg-blue-700 shadow-md">
                 {editingId ? 'Save Changes' : 'Confirm & Save'}
               </button>
             </div>
