@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Search, Plus, User, Phone, ShieldCheck, X, Edit3, Mail, MapPin, Wallet, CalendarDays, Clock, Activity, CheckCircle2, XCircle, History, CalendarRange } from 'lucide-react';
+import { Search, Plus, User, Phone, ShieldCheck, X, Edit3, Wallet, CalendarDays, Clock, CheckCircle2, XCircle, History } from 'lucide-react';
 
 const formatTime = (time24: string) => {
   if (!time24) return '';
@@ -12,75 +12,57 @@ const formatTime = (time24: string) => {
   return `${hour % 12 || 12}:${minute} ${ampm}`;
 };
 
-const DEFAULT_PLAYER = { name: '', parentName: '', parentPhone: '', email: '', address: '', className: '' };
+const DEFAULT_PLAYER = { name: '', parentName: '', parentPhone: '', status: 'ACTIVE' };
 
 function PlayersContent() {
   const searchParams = useSearchParams();
   const [isMounted, setIsMounted] = useState(false);
-  
   const [players, setPlayers] = useState<any[]>([]);
   const [academyClasses, setAcademyClasses] = useState<any[]>([]);
+  
+  // 恢复读取全局出勤率
   const [attendances, setAttendances] = useState<any[]>([]);
 
   useEffect(() => {
     setIsMounted(true);
     const savedPlayers = localStorage.getItem('academy_players');
-    if (savedPlayers) { try { setPlayers(JSON.parse(savedPlayers)); } catch (e) {} } 
-    else {
-      setPlayers([
-        { id: 'p1', name: 'Ahmad bin Ali', parentName: 'Ali Bin Abu', parentPhone: '012-3456789', email: '', address: '', status: 'ACTIVE' },
-        { id: 'p2', name: 'Jason Lee', parentName: 'Mr. Lee', parentPhone: '011-2223334', email: '', address: '', status: 'ACTIVE' },
-      ]);
-    }
+    if (savedPlayers) { try { setPlayers(JSON.parse(savedPlayers)); } catch(e){} } 
+    else { setPlayers([{ id: 'p1', name: 'Ahmad bin Ali', parentName: 'Ali Bin Abu', parentPhone: '012-3456789', status: 'ACTIVE' }]); }
+    
     const savedClasses = localStorage.getItem('academy_classes');
-    if (savedClasses) try { setAcademyClasses(JSON.parse(savedClasses)); } catch (e) {}
+    if (savedClasses) try { setAcademyClasses(JSON.parse(savedClasses)); } catch(e){}
+    
     const savedAtt = localStorage.getItem('academy_attendance');
-    if (savedAtt) try { setAttendances(JSON.parse(savedAtt)); } catch (e) {}
+    if (savedAtt) try { setAttendances(JSON.parse(savedAtt)); } catch(e){}
   }, []);
 
-  useEffect(() => {
-    if (isMounted) localStorage.setItem('academy_players', JSON.stringify(players));
-  }, [players, isMounted]);
+  useEffect(() => { if (isMounted) localStorage.setItem('academy_players', JSON.stringify(players)); }, [players, isMounted]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [playerForm, setPlayerForm] = useState<any>(DEFAULT_PLAYER);
   const [activeTab, setActiveTab] = useState<'PROFILE' | 'CLASSES' | 'ATTENDANCE'>('PROFILE');
-  
-  const [attTimeframe, setAttTimeframe] = useState<'TODAY' | 'LAST_WEEK' | 'THIS_MONTH' | 'LAST_MONTH' | 'CUSTOM'>('THIS_MONTH');
-  const [attStartDate, setAttStartDate] = useState('');
-  const [attEndDate, setAttEndDate] = useState('');
+
+  useEffect(() => {
+    const autoAdd = searchParams.get('autoAdd');
+    if (autoAdd === 'true' && isMounted) { setEditingId(null); setPlayerForm(DEFAULT_PLAYER); setActiveTab('PROFILE'); setIsModalOpen(true); }
+  }, [searchParams, isMounted]);
 
   const filteredPlayers = players.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.parentPhone.includes(searchQuery));
-
-  const openAddModal = () => { setEditingId(null); setPlayerForm(DEFAULT_PLAYER); setActiveTab('PROFILE'); setIsModalOpen(true); };
   const openProfileModal = (player: any) => { setEditingId(player.id); setPlayerForm({ ...player }); setActiveTab('PROFILE'); setIsModalOpen(true); };
 
   const handleSavePlayer = () => {
     if (!playerForm.name || !playerForm.parentName || !playerForm.parentPhone) return alert('Required fields missing!');
-    if (editingId) {
-      setPlayers(players.map(p => p.id === editingId ? { ...p, ...playerForm } : p));
-    } else {
-      const newPlayer = { id: `p${Date.now()}`, ...playerForm, status: 'ACTIVE' };
-      setPlayers([newPlayer, ...players]);
-      if (playerForm.className) {
-        const updatedClasses = academyClasses.map(cls => {
-          if (cls.name === playerForm.className) return { ...cls, enrolledPlayers: [...(cls.enrolledPlayers || []), { id: newPlayer.id, name: newPlayer.name, phone: newPlayer.parentPhone }] };
-          return cls;
-        });
-        setAcademyClasses(updatedClasses);
-        localStorage.setItem('academy_classes', JSON.stringify(updatedClasses));
-      }
-    }
+    if (editingId) setPlayers(players.map(p => p.id === editingId ? { ...p, ...playerForm } : p));
+    else setPlayers([{ id: `p${Date.now()}`, ...playerForm, status: 'ACTIVE' }, ...players]);
     setIsModalOpen(false);
   };
 
-  const selectedClassDetails = academyClasses.find(c => c.name === playerForm.className);
   const playerEnrolledClasses = editingId ? academyClasses.filter(c => c.enrolledPlayers?.some((p: any) => p.id === editingId)) : [];
   const totalMonthlyFee = playerEnrolledClasses.reduce((sum, cls) => sum + (Number(cls.monthlyFee) || 0), 0);
 
-  // Attendance Logic
+  // 恢复出勤计算逻辑！
   let playerRawRecords: any[] = [];
   if (editingId) {
     attendances.forEach(att => {
@@ -92,31 +74,9 @@ function PlayersContent() {
     });
   }
   playerRawRecords.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-  const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
-  const thisMonthPrefix = todayStr.substring(0, 7);
-  const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const lastMonthPrefix = lastMonthDate.toISOString().split('T')[0].substring(0, 7);
-  const sevenDaysAgoDate = new Date();
-  sevenDaysAgoDate.setDate(now.getDate() - 7);
-  const lastWeekStr = sevenDaysAgoDate.toISOString().split('T')[0];
-
-  const filteredRecords = playerRawRecords.filter(rec => {
-    if (attTimeframe === 'TODAY') return rec.date === todayStr;
-    if (attTimeframe === 'LAST_WEEK') return rec.date >= lastWeekStr && rec.date <= todayStr;
-    if (attTimeframe === 'THIS_MONTH') return rec.date.startsWith(thisMonthPrefix);
-    if (attTimeframe === 'LAST_MONTH') return rec.date.startsWith(lastMonthPrefix);
-    if (attTimeframe === 'CUSTOM') {
-      const passStart = attStartDate ? rec.date >= attStartDate : true;
-      const passEnd = attEndDate ? rec.date <= attEndDate : true;
-      return passStart && passEnd;
-    }
-    return true;
-  });
-
-  let attPresent = 0, attAbsent = 0, attLate = 0, attTotal = filteredRecords.length;
-  filteredRecords.forEach(r => {
+  
+  let attPresent = 0, attAbsent = 0, attLate = 0, attTotal = playerRawRecords.length;
+  playerRawRecords.forEach(r => {
     if (r.status === 'PRESENT') attPresent++;
     if (r.status === 'ABSENT') attAbsent++;
     if (r.status === 'LATE') attLate++;
@@ -130,39 +90,33 @@ function PlayersContent() {
     return 'bg-gray-100 text-gray-700 border-gray-200';
   };
 
-  if (!isMounted) return <div className="min-h-screen bg-gray-50 flex items-center justify-center pb-32"><p className="text-gray-400 font-bold animate-pulse">Loading Players...</p></div>;
+  if (!isMounted) return <div className="h-full flex items-center justify-center"><p className="text-gray-400 font-bold">Loading...</p></div>;
 
   return (
-    <div className="pb-32 bg-gray-50 min-h-screen">
-      <header className="bg-blue-600 text-white p-4 pt-safe pb-6 rounded-b-3xl shadow-sm sticky top-0 z-10">
-        <div className="flex justify-between items-center mb-4">
-          <h1 className="text-xl font-bold">Players</h1>
-          <button onClick={openAddModal} className="bg-white text-blue-600 font-bold px-3 py-2 rounded-xl text-sm flex items-center space-x-1 shadow-sm active:bg-blue-50 transition-colors"><Plus size={16} /><span>Add Student</span></button>
+    <div className="bg-gray-50 min-h-full pb-10">
+      <header className="bg-blue-600 text-white p-4 pt-safe pb-6 rounded-b-[2.5rem] shadow-sm sticky top-0 z-10">
+        <div className="flex justify-between items-center mb-4 mt-2">
+          <h1 className="text-2xl font-black">Players</h1>
+          <button onClick={() => { setEditingId(null); setPlayerForm(DEFAULT_PLAYER); setActiveTab('PROFILE'); setIsModalOpen(true); }} className="bg-white text-blue-600 font-bold px-4 py-2 rounded-xl text-sm flex items-center space-x-1 shadow-sm active:scale-95 transition-all"><Plus size={16} /><span>Add Student</span></button>
         </div>
         <div className="relative">
-          <Search size={18} className="absolute left-3 top-3.5 text-gray-400" />
-          <input type="text" placeholder="Search student or phone..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white text-gray-900 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 shadow-sm" />
+          <Search size={18} className="absolute left-4 top-3.5 text-blue-200" />
+          <input type="text" placeholder="Search student or phone..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-blue-700/50 text-white placeholder-blue-200 rounded-2xl pl-11 pr-4 py-3.5 text-[16px] focus:outline-none focus:ring-2 focus:ring-white border border-blue-500/30 backdrop-blur-sm" />
         </div>
       </header>
 
-      <div className="p-4 space-y-3">
+      <div className="p-4 space-y-4">
         {filteredPlayers.map((player) => (
-          <div 
-            key={player.id} 
-            onClick={() => openProfileModal(player)}
-            className="bg-white p-4 rounded-3xl shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-100 relative cursor-pointer hover:border-blue-400 hover:shadow-md transition-all active:scale-[0.99]"
-          >
-            <div className="absolute top-4 right-4 p-2 bg-gray-50 text-gray-400 rounded-full">
-              <Edit3 size={16} />
-            </div>
-            <div className="flex items-start space-x-3">
-              <div className="bg-blue-50 p-3 rounded-full mt-1"><User size={20} className="text-blue-600" /></div>
+          <div key={player.id} onClick={() => openProfileModal(player)} className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-gray-100 active:scale-[0.99] transition-transform cursor-pointer relative">
+            <div className="absolute top-5 right-5 text-gray-300"><Edit3 size={18} /></div>
+            <div className="flex items-start space-x-4 pr-8">
+              <div className="bg-blue-50 p-4 rounded-full"><User size={24} className="text-blue-600" /></div>
               <div className="w-full">
-                <p className="font-black text-gray-900 text-lg text-blue-700 hover:text-blue-800 transition-colors underline decoration-blue-200 underline-offset-4">{player.name}</p>
-                <span className="inline-flex text-[10px] font-bold px-2 py-0.5 rounded-md mb-2 mt-1 bg-green-100 text-green-700">{player.status}</span>
-                <div className="bg-gray-50 p-2.5 rounded-xl border border-gray-100 space-y-1.5">
-                  <div className="flex justify-between items-center text-xs"><span className="text-gray-500 font-medium">Parent:</span><span className="font-bold text-gray-800">{player.parentName || 'N/A'}</span></div>
-                  <div className="flex justify-between items-center text-xs"><span className="text-gray-500 font-medium">Phone:</span><span className="font-bold text-blue-600 flex items-center"><Phone size={10} className="mr-1" />{player.parentPhone}</span></div>
+                <p className="font-black text-gray-900 text-xl text-blue-700">{player.name}</p>
+                <span className="inline-flex text-[10px] font-black px-2.5 py-1 rounded-md mb-2 mt-1.5 bg-green-100 text-green-700">{player.status}</span>
+                <div className="bg-gray-50 p-3 rounded-2xl border border-gray-100/50 space-y-2">
+                  <div className="flex justify-between items-center text-sm"><span className="text-gray-500 font-bold">Parent:</span><span className="font-bold text-gray-800">{player.parentName || 'N/A'}</span></div>
+                  <div className="flex justify-between items-center text-sm"><span className="text-gray-500 font-bold">Phone:</span><span className="font-black text-blue-600 flex items-center"><Phone size={14} className="mr-1" />{player.parentPhone}</span></div>
                 </div>
               </div>
             </div>
@@ -171,55 +125,82 @@ function PlayersContent() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
-            <div className="p-6 pb-0 border-b border-gray-100 shrink-0">
-              <div className="flex justify-between items-center mb-4">
-                <div>
-                  <h3 className="font-black text-xl">{editingId ? playerForm.name : 'Add New Player'}</h3>
-                </div>
-                <button onClick={() => setIsModalOpen(false)} className="text-gray-400 bg-gray-100 rounded-full p-2 font-bold active:bg-gray-200"><X size={18} /></button>
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[60] flex items-end justify-center">
+          <div className="bg-white w-full max-w-md rounded-t-[2.5rem] shadow-2xl flex flex-col h-[90vh] animate-in slide-in-from-bottom-5">
+            <div className="p-6 border-b border-gray-100 shrink-0">
+              <div className="flex justify-between items-center mb-5">
+                <div><h3 className="font-black text-2xl text-gray-900">{editingId ? playerForm.name : 'New Player'}</h3></div>
+                <button onClick={() => setIsModalOpen(false)} className="bg-white text-gray-400 rounded-full p-2.5 border border-gray-200 active:bg-gray-100"><X size={20} /></button>
               </div>
-
               {editingId && (
-                <div className="flex space-x-4">
-                  <button onClick={() => setActiveTab('PROFILE')} className={`pb-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'PROFILE' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>Profile</button>
-                  <button onClick={() => setActiveTab('CLASSES')} className={`pb-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'CLASSES' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>Classes</button>
-                  <button onClick={() => setActiveTab('ATTENDANCE')} className={`pb-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'ATTENDANCE' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>Attendance</button>
+                <div className="flex space-x-6 border-b border-gray-100">
+                  <button onClick={() => setActiveTab('PROFILE')} className={`pb-3 text-[15px] font-black transition-colors border-b-2 ${activeTab === 'PROFILE' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400'}`}>Profile</button>
+                  <button onClick={() => setActiveTab('CLASSES')} className={`pb-3 text-[15px] font-black transition-colors border-b-2 ${activeTab === 'CLASSES' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400'}`}>Classes</button>
+                  <button onClick={() => setActiveTab('ATTENDANCE')} className={`pb-3 text-[15px] font-black transition-colors border-b-2 ${activeTab === 'ATTENDANCE' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400'}`}>Attendance</button>
                 </div>
               )}
             </div>
             
-            <div className="p-6 overflow-y-auto space-y-5 flex-1 bg-gray-50/50 rounded-b-[2rem]">
-              {/* Tab Content remains consistent with previous logic */}
-              {activeTab === 'PROFILE' && ( /* ... */ <div className="space-y-4 animate-in fade-in duration-300">
-                  <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-                    <div><label className="block text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2 ml-1">Student Name <span className="text-red-500">*</span></label><input type="text" value={playerForm.name} onChange={(e) => setPlayerForm({...playerForm, name: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div><label className="block text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2 ml-1">Parent Name <span className="text-red-500">*</span></label><input type="text" value={playerForm.parentName} onChange={(e) => setPlayerForm({...playerForm, parentName: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
-                      <div><label className="block text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2 ml-1">Parent Phone <span className="text-red-500">*</span></label><input type="tel" value={playerForm.parentPhone} onChange={(e) => setPlayerForm({...playerForm, parentPhone: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+            <div className="p-6 overflow-y-auto flex-1 bg-gray-50/50 space-y-6 pb-32">
+              {activeTab === 'PROFILE' && (
+                <div className="space-y-4 animate-in fade-in">
+                  <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-5">
+                    <div><label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Student Name <span className="text-red-500">*</span></label><input type="text" value={playerForm.name} onChange={(e) => setPlayerForm({...playerForm, name: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 font-bold text-[16px] text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" /></div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div><label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Parent Name <span className="text-red-500">*</span></label><input type="text" value={playerForm.parentName} onChange={(e) => setPlayerForm({...playerForm, parentName: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 font-bold text-[16px] text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" /></div>
+                      <div><label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Parent Phone <span className="text-red-500">*</span></label><input type="tel" value={playerForm.parentPhone} onChange={(e) => setPlayerForm({...playerForm, parentPhone: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 font-bold text-[16px] text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" /></div>
                     </div>
                   </div>
-                </div>)}
-              {activeTab === 'CLASSES' && ( /* ... */ <div className="space-y-4 animate-in fade-in duration-300">
-                  <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl p-5 text-white shadow-md">
-                    <p className="text-green-100 text-xs font-bold uppercase tracking-wider mb-1">Total Monthly Fee</p>
-                    <div className="flex items-center space-x-2"><Wallet size={24} className="text-green-200" /><span className="text-4xl font-black">RM {totalMonthlyFee}</span></div>
+                </div>
+              )}
+
+              {activeTab === 'CLASSES' && (
+                <div className="space-y-5 animate-in fade-in">
+                  <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-[2rem] p-6 text-white shadow-lg">
+                    <p className="text-green-100 text-[11px] font-black uppercase tracking-widest mb-1">Total Monthly Fee</p>
+                    <div className="flex items-center space-x-2"><Wallet size={28} className="text-green-200" /><span className="text-4xl font-black">RM {totalMonthlyFee}</span></div>
                   </div>
-                  {playerEnrolledClasses.map((cls: any) => (<div key={cls.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100"><h4 className="font-bold">{cls.name}</h4><span className="font-black text-green-600">RM {cls.monthlyFee}</span></div>))}
-                </div>)}
-              {activeTab === 'ATTENDANCE' && ( /* ... */ <div className="space-y-4 animate-in fade-in duration-300">
-                  {/* Attendance logic ... */}
-              </div>)}
+                  {playerEnrolledClasses.map((cls: any) => (
+                    <div key={cls.id} className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100"><h4 className="font-black text-lg">{cls.name}</h4><span className="font-black text-green-600 text-lg">RM {cls.monthlyFee}</span></div>
+                  ))}
+                </div>
+              )}
+
+              {/* 完美恢复 Attendance 统计面板 */}
+              {activeTab === 'ATTENDANCE' && (
+                <div className="space-y-5 animate-in fade-in">
+                  <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 text-center relative">
+                    <div className={`inline-flex items-center justify-center w-32 h-32 rounded-full border-8 mb-4 ${attRate >= 80 ? 'border-green-500 bg-green-50 text-green-600' : 'border-orange-400 bg-orange-50 text-orange-600'}`}>
+                      <span className="text-4xl font-black">{attTotal > 0 ? `${attRate}%` : '--'}</span>
+                    </div>
+                    <h4 className="font-black text-gray-900 text-lg">Attendance Rate</h4>
+                    <p className="text-sm text-gray-500 mt-1 font-bold">Based on <span className="text-gray-900">{attTotal}</span> total sessions</p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 text-center"><CheckCircle2 size={24} className="mx-auto text-green-500 mb-2" /><p className="text-2xl font-black text-gray-900">{attPresent}</p><p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Present</p></div>
+                    <div className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 text-center"><XCircle size={24} className="mx-auto text-red-500 mb-2" /><p className="text-2xl font-black text-gray-900">{attAbsent}</p><p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Absent</p></div>
+                    <div className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 text-center"><Clock size={24} className="mx-auto text-orange-500 mb-2" /><p className="text-2xl font-black text-gray-900">{attLate}</p><p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Late</p></div>
+                  </div>
+                  <div>
+                    <h4 className="flex items-center text-[11px] font-black text-gray-400 uppercase tracking-widest mb-4 mt-6"><History size={16} className="mr-2" /> Recent Sessions</h4>
+                    <div className="space-y-3">
+                      {playerRawRecords.length === 0 ? <p className="text-gray-400 text-sm font-bold text-center py-4">No records found.</p> : playerRawRecords.map((record: any, idx: number) => (
+                        <div key={idx} className={`flex justify-between items-center p-4 rounded-2xl border ${getStatusStyle(record.status)}`}>
+                          <div><p className="text-base font-black">{record.date}</p><p className="text-[11px] uppercase font-black tracking-widest opacity-80 mt-1">{record.className}</p></div>
+                          <div className="font-black text-sm px-3 py-1.5 bg-white/50 rounded-lg">{record.status}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            
-            {activeTab === 'PROFILE' && (
-              <div className="p-6 border-t border-gray-100 shrink-0 bg-white rounded-b-[2rem]">
-                <button onClick={handleSavePlayer} className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl flex justify-center items-center space-x-2 active:bg-blue-700 transition-colors shadow-[0_4px_14px_0_rgba(37,99,235,0.39)]">
-                  <ShieldCheck size={20} /><span>Save Changes</span>
-                </button>
-              </div>
-            )}
+
+            <div className="p-6 pb-12 border-t border-gray-100 shrink-0 bg-white">
+              <button onClick={handleSavePlayer} className="w-full bg-blue-600 text-white font-black text-lg py-4 rounded-2xl active:bg-blue-700 shadow-md">
+                {editingId ? 'Save Changes' : 'Confirm & Save Player'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -227,4 +208,4 @@ function PlayersContent() {
   );
 }
 
-export default function PlayersPage() { return <main className="min-h-screen bg-gray-50"><Suspense fallback={<div className="p-4 flex justify-center text-gray-400 font-bold">Loading...</div>}><PlayersContent /></Suspense></main>; }
+export default function PlayersPage() { return <Suspense fallback={<div>Loading...</div>}><PlayersContent /></Suspense>; }
