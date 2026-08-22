@@ -1,9 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 import { ShieldCheck, Mail, Lock, ArrowRight, Loader2, Play } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+
+// 页面内直连 Supabase，彻底根除 module-not-found 路径找不到的构建错误
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://knnpacipzzyvluchbykb.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtubnBhY2lwenp5dmx1Y2hieWtiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczODM2NjYsImV4cCI6MjEwMjk1OTY2Nn0.NnP85JAAv5KP-8_iWpEkgG_D9dwlbB68-mh-x6clNFA';
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -21,20 +27,19 @@ export default function LoginPage() {
 
     try {
       if (isLogin) {
-        // 登录逻辑
+        // 登录
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        router.push('/'); // 登录成功，去 Dashboard
+        router.push('/');
       } else {
-        // 注册新老板 (SaaS 核心逻辑)
-        if (!academyName) throw new Error('Academy Name is required.');
+        // 注册新学院/老板
+        if (!academyName.trim()) throw new Error('Academy Name is required.');
 
-        // 1. 注册 Supabase 账号
         const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
         if (authError) throw authError;
 
         if (authData.user) {
-          // 2. 为新老板创建专属的 Academy (学院)
+          // 1. 创建学院记录
           const { data: academyData, error: acError } = await supabase
             .from('academies')
             .insert([{ name: academyName }])
@@ -42,7 +47,7 @@ export default function LoginPage() {
             .single();
           if (acError) throw acError;
 
-          // 3. 把新老板和他的学院绑定在一起
+          // 2. 绑定老板 profile
           const { error: profileError } = await supabase
             .from('profiles')
             .insert([{ id: authData.user.id, academy_id: academyData.id, role: 'ADMIN' }]);
@@ -60,7 +65,6 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col justify-center items-center p-6 relative overflow-hidden antialiased">
-      
       {/* 极简运动风背景光效 */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
         <div className="absolute -top-[20%] -left-[10%] w-[70vw] h-[70vw] bg-blue-600/20 rounded-full blur-[120px] mix-blend-screen"></div>
@@ -68,8 +72,6 @@ export default function LoginPage() {
       </div>
 
       <div className="w-full max-w-sm relative z-10 animate-in fade-in slide-in-from-bottom-8 duration-700">
-        
-        {/* Logo 区域 */}
         <div className="mb-12 text-center">
           <div className="bg-white text-black w-16 h-16 rounded-3xl mx-auto flex items-center justify-center mb-6 shadow-2xl">
             <Play size={28} className="ml-1" fill="currentColor" />
@@ -78,7 +80,6 @@ export default function LoginPage() {
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">Academy Management</p>
         </div>
 
-        {/* 登录/注册表单 */}
         <form onSubmit={handleAuth} className="space-y-4">
           {!isLogin && (
             <div className="animate-in fade-in slide-in-from-top-2">
