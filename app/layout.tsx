@@ -6,6 +6,15 @@ import { usePathname } from 'next/navigation';
 import { Home, CalendarDays, BookOpen, ClipboardCheck, Wallet } from 'lucide-react';
 import { useEffect } from 'react';
 
+// 🌟 1. 从 Google 字体库引入类似 Nike/Apple 风格的高级极简字体 'Inter'
+import { Inter } from 'next/font/google';
+
+// 🌟 2. 优化字体加载配置，支持所有高级字重 (极细到极粗的对比)
+const inter = Inter({ 
+  subsets: ['latin'],
+  display: 'swap',
+});
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
@@ -30,7 +39,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
       </head>
-      <body className="bg-gray-200 text-gray-900 sm:flex sm:justify-center antialiased">
+      
+      {/* 
+        🌟 3. 核心视觉升级！
+        - inter.className: 将高级字体应用到整个 App。
+        - antialiased: 开启 iOS 级别的字体抗锯齿，让文字边缘像刀锋一样锐利、干净，彻底告别网页感！
+      */}
+      <body className={`${inter.className} bg-gray-200 text-gray-900 sm:flex sm:justify-center antialiased`}>
         
         <div className="w-full sm:max-w-md bg-gray-50 min-h-screen relative shadow-2xl flex flex-col overflow-x-hidden">
           
@@ -38,7 +53,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {children}
           </div>
 
-          {/* 核心修复：把 z-[100] 降级为 z-40，允许弹窗覆盖导航栏 */}
           <nav 
             style={{ bottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
             className="fixed left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] sm:w-[26rem] bg-white/95 backdrop-blur-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-200/60 flex justify-between items-center px-3 py-2.5 rounded-full z-40"
