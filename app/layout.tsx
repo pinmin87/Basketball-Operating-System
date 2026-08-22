@@ -33,21 +33,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="bg-gray-200 text-gray-900 sm:flex sm:justify-center antialiased">
         
-        {/* 取消了固定高度限制，让内容自然延伸 */}
-        <div className="w-full sm:max-w-md bg-gray-50 min-h-screen relative shadow-2xl flex flex-col">
+        <div className="w-full sm:max-w-md bg-gray-50 min-h-screen relative shadow-2xl flex flex-col overflow-x-hidden">
           
-          {/* 内容区底部预留足够的空间 (pb-28)，防止内容被底部的导航栏遮挡 */}
-          <div className="flex-1 w-full pb-28">
+          {/* 留出充足的底部空间，因为悬浮导航栏会占据一定高度 */}
+          <div className="flex-1 w-full pb-32">
             {children}
           </div>
 
           {/* 
-            【核心重构】IG 风格悬浮底部导航栏
-            1. fixed bottom-0：像钉子一样死死钉在屏幕最下方，绝对不再乱跳！
-            2. 去掉文字，图标放大到 size 28，点击区域更大、更准。
-            3. 加入了 max(env(safe-area-inset-bottom),16px)，完美包裹 iPhone 底部的横线。
+            【全新高级定制】悬浮胶囊导航栏 (Floating Pill Dock)
+            1. bottom: calc(...) -> 强制离开底部黑线，往上悬浮，绝对好点且不会掉下去！
+            2. w-[calc(100%-2rem)] 和 rounded-full -> 左右留白，两边半圆形，悬浮感十足！
+            3. 保留了文字标签，比例完美。
           */}
-          <nav className="fixed bottom-0 w-full sm:max-w-md mx-auto bg-white/90 backdrop-blur-2xl border-t border-gray-200/50 flex justify-between items-center px-6 pt-3 pb-[max(env(safe-area-inset-bottom),16px)] z-[100]">
+          <nav 
+            style={{ bottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
+            className="fixed left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] sm:w-[26rem] bg-white/95 backdrop-blur-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-200/60 flex justify-between items-center px-3 py-2.5 rounded-full z-[100]"
+          >
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
@@ -56,19 +58,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <Link 
                   key={item.name} 
                   href={item.href} 
-                  className="relative flex flex-col items-center justify-center w-14 h-12 active:scale-90 transition-transform duration-200"
+                  className="relative flex flex-col items-center justify-center w-[18%] active:scale-90 transition-transform duration-200"
                 >
-                  {/* 未选中时是灰色细线，选中时变成高级纯黑粗线 (IG 风格) */}
                   <Icon 
-                    size={28} 
-                    strokeWidth={isActive ? 2.5 : 1.5} 
-                    className={isActive ? 'text-gray-900' : 'text-gray-400 hover:text-gray-500'} 
+                    size={22} 
+                    strokeWidth={isActive ? 2.5 : 2} 
+                    className={isActive ? 'text-blue-600' : 'text-gray-400 hover:text-gray-500'} 
                   />
-                  
-                  {/* IG 风格的极简状态指示器 (选中的图标下方会出现一个小黑点) */}
-                  {isActive && (
-                    <div className="absolute -bottom-1 w-1 h-1 bg-gray-900 rounded-full"></div>
-                  )}
+                  <span className={`text-[9px] mt-1 font-black tracking-wide ${isActive ? 'text-blue-600' : 'text-gray-400'}`}>
+                    {item.name}
+                  </span>
                 </Link>
               );
             })}
