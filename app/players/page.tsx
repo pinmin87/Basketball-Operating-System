@@ -4,9 +4,11 @@ import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Search, Plus, User, Phone, X, Edit3, Wallet, Clock, CheckCircle2, XCircle, History, Mail, MapPin, Trash2 } from 'lucide-react';
 
-// 请确保你有一个初始化好的 Supabase 客户端配置文件
-// 如果你的路径不同，请修改下方的 import 路径（例如 import { supabase } from '@/utils/supabase/client'）
-import { supabase } from '@/lib/supabase'; 
+// 🚀 核心修复：直接在页面内初始化 Supabase，100% 避免 Vercel 找不到路径的问题
+import { createClient } from '@supabase/supabase-js';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://knnpacipzzyvluchbykb.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtubnBhY2lwenp5dmx1Y2hieWtiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczODM2NjYsImV4cCI6MjEwMjk1OTY2Nn0.NnP85JAAv5KP-8_iWpEkgG_D9dwlbB68-mh-x6clNFA';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const formatTime = (time24: string) => {
   if (!time24) return '';
@@ -33,7 +35,7 @@ function PlayersContent() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [playerForm, setPlayerForm] = useState<any>(DEFAULT_PLAYER);
   const [activeTab, setActiveTab] = useState<'PROFILE' | 'CLASSES' | 'ATTENDANCE'>('PROFILE');
-  const [isSaving, setIsSaving] = useState(false); // 新增：防止重复点击提交
+  const [isSaving, setIsSaving] = useState(false);
 
   // 1. 初始化数据：从 Supabase 获取数据
   useEffect(() => {
@@ -135,7 +137,7 @@ function PlayersContent() {
     const payload = {
       full_name: playerForm.name,
       gender: playerForm.gender,
-      date_of_birth: playerForm.dob || null, // Supabase 日期不能是空字符串
+      date_of_birth: playerForm.dob || null, 
       parent_name: playerForm.parentName,
       parent_phone: playerForm.parentPhone,
       email: playerForm.email,
@@ -231,7 +233,6 @@ function PlayersContent() {
         {filteredPlayers.map((player) => (
           <div key={player.id} onClick={() => openProfileModal(player)} className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-gray-100 active:scale-[0.99] transition-transform cursor-pointer relative">
             
-            {/* 保留：右上角的编辑和红色删除图标 */}
             <div className="absolute top-5 right-5 flex items-center space-x-3">
                <button onClick={(e) => { e.stopPropagation(); openProfileModal(player); }} className="text-gray-300 hover:text-blue-500 transition-colors"><Edit3 size={18} /></button>
                <button 
