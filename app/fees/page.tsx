@@ -158,7 +158,7 @@ function FeesContent() {
           </div>
         )}
 
-        {/* 核心修复：完全写死了样式代码，再也不会出现 activeViewStyle 报错！ */}
+        {/* 完全写死了样式，没有任何外部函数引用 */}
         <div className="flex bg-gray-200/60 p-1.5 rounded-2xl">
           <button onClick={() => setActiveTab('UNPAID')} className={`flex-1 py-3 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'UNPAID' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>UNPAID</button>
           <button onClick={() => setActiveTab('PAID')} className={`flex-1 py-3 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'PAID' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>PAID</button>
