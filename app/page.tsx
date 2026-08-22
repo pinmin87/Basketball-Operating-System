@@ -20,7 +20,7 @@ export default function DashboardPage() {
         const parsed = JSON.parse(savedPlayers);
         if (Array.isArray(parsed)) setPlayersCount(parsed.length);
       } else setPlayersCount(1);
-    } catch (e) { console.error(e); }
+    } catch (e) {}
 
     try {
       const savedClasses = localStorage.getItem('academy_classes');
@@ -28,7 +28,7 @@ export default function DashboardPage() {
         const parsed = JSON.parse(savedClasses);
         if (Array.isArray(parsed)) setClassesCount(parsed.length);
       } else setClassesCount(1);
-    } catch (e) { console.error(e); }
+    } catch (e) {}
 
     try {
       const savedFees = localStorage.getItem('academy_fees');
@@ -40,10 +40,10 @@ export default function DashboardPage() {
           setFeesData({ collected: col, outstanding: exp - col });
         } else setFeesData({ collected: 120, outstanding: 0 });
       } else setFeesData({ collected: 120, outstanding: 0 });
-    } catch (e) { console.error(e); setFeesData({ collected: 120, outstanding: 0 }); }
+    } catch (e) { setFeesData({ collected: 120, outstanding: 0 }); }
   }, []);
 
-  if (!isMounted) return <div className="h-full flex items-center justify-center"><p className="text-gray-400 font-bold animate-pulse">Loading Command Center...</p></div>;
+  if (!isMounted) return <div className="h-full flex items-center justify-center"><p className="text-gray-400 font-bold animate-pulse">Loading...</p></div>;
 
   return (
     <main className="w-full bg-gray-50 pb-10">
@@ -86,7 +86,7 @@ export default function DashboardPage() {
         <div>
           <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-1">Quick Actions</h3>
           <div className="grid grid-cols-2 gap-3">
-            {/* 修改：点击直接进入 /players，不带参数 */}
+            {/* 取消了 ?autoAdd=true 参数，直接进入所有球员列表 */}
             <Link href="/players" className="bg-blue-600 text-white p-4 rounded-3xl shadow-[0_4px_14px_0_rgba(37,99,235,0.25)] flex flex-col justify-between active:scale-95 transition-all hover:bg-blue-700 h-28">
               <Users size={22} className="mb-2 text-blue-200" />
               <div>

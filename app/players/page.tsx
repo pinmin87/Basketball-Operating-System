@@ -52,13 +52,13 @@ function PlayersContent() {
   const openProfileModal = (player: any) => { setEditingId(player.id); setPlayerForm({ ...player }); setActiveTab('PROFILE'); setIsModalOpen(true); };
 
   const handleSavePlayer = () => {
-    if (!playerForm.name || !playerForm.parentName || !playerForm.parentPhone) return alert('Name and Parent Phone are required!');
+    if (!playerForm.name || !playerForm.parentName || !playerForm.parentPhone) return alert('Player Name and Parent Phone are required!');
     if (editingId) setPlayers(players.map(p => p.id === editingId ? { ...p, ...playerForm } : p));
     else setPlayers([{ id: `p${Date.now()}`, ...playerForm, status: 'ACTIVE' }, ...players]);
     setIsModalOpen(false);
   };
 
-  // 新增：删除球员功能 (防误删提示)
+  // 新增：安全删除球员功能
   const handleDeletePlayer = (id: string, name: string) => {
     if (window.confirm(`Are you sure you want to delete player "${name}"? This action cannot be undone.`)) {
       setPlayers(players.filter(p => p.id !== id));
@@ -114,9 +114,9 @@ function PlayersContent() {
         {filteredPlayers.map((player) => (
           <div key={player.id} onClick={() => openProfileModal(player)} className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-gray-100 active:scale-[0.99] transition-transform cursor-pointer relative">
             
-            {/* 新增：右上角的 编辑 和 删除 图标 */}
+            {/* 新增：右上角的编辑和红色删除图标 */}
             <div className="absolute top-5 right-5 flex items-center space-x-3">
-               <button className="text-gray-300 hover:text-blue-500 transition-colors"><Edit3 size={18} /></button>
+               <button onClick={(e) => { e.stopPropagation(); openProfileModal(player); }} className="text-gray-300 hover:text-blue-500 transition-colors"><Edit3 size={18} /></button>
                <button 
                  onClick={(e) => { e.stopPropagation(); handleDeletePlayer(player.id, player.name); }} 
                  className="text-gray-300 hover:text-red-500 transition-colors"
@@ -139,6 +139,7 @@ function PlayersContent() {
             </div>
           </div>
         ))}
+        {filteredPlayers.length === 0 && <div className="text-center py-10 text-gray-400 font-bold text-sm">No players found.</div>}
       </div>
 
       {isModalOpen && (
@@ -163,6 +164,7 @@ function PlayersContent() {
                 <div className="space-y-4 animate-in fade-in">
                   <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-5">
                     <h4 className="text-[11px] font-black text-blue-600 uppercase tracking-widest border-b border-gray-50 pb-2">Player Info</h4>
+                    {/* 修改为 PLAYER NAME */}
                     <div><label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Player Name <span className="text-red-500">*</span></label><input type="text" value={playerForm.name} onChange={(e) => setPlayerForm({...playerForm, name: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 font-bold text-[16px] text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" /></div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
