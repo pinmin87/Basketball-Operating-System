@@ -4,6 +4,10 @@ import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Search, Plus, User, Phone, X, Edit3, Wallet, Clock, CheckCircle2, XCircle, History, Mail, MapPin, Trash2 } from 'lucide-react';
 
+// 请确保你有一个初始化好的 Supabase 客户端配置文件
+// 如果你的路径不同，请修改下方的 import 路径（例如 import { supabase } from '@/utils/supabase/client'）
+import { supabase } from '@/lib/supabase'; 
+
 const formatTime = (time24: string) => {
   if (!time24) return '';
   const [hourString, minute] = time24.split(':');
@@ -17,54 +21,167 @@ const DEFAULT_PLAYER = { name: '', gender: 'Male', dob: '', parentName: '', pare
 function PlayersContent() {
   const searchParams = useSearchParams();
   const [isMounted, setIsMounted] = useState(false);
+  
+  // 数据状态
   const [players, setPlayers] = useState<any[]>([]);
   const [academyClasses, setAcademyClasses] = useState<any[]>([]);
   const [attendances, setAttendances] = useState<any[]>([]);
 
-  useEffect(() => {
-    setIsMounted(true);
-    const savedPlayers = localStorage.getItem('academy_players');
-    if (savedPlayers) { try { setPlayers(JSON.parse(savedPlayers)); } catch(e){} } 
-    else { setPlayers([{ id: 'p1', name: 'Ahmad bin Ali', gender: 'Male', dob: '2014-05-12', parentName: 'Ali Bin Abu', parentPhone: '012-3456789', email: 'ali@example.com', address: 'Johor Bahru', status: 'ACTIVE' }]); }
-    
-    const savedClasses = localStorage.getItem('academy_classes');
-    if (savedClasses) try { setAcademyClasses(JSON.parse(savedClasses)); } catch(e){}
-    
-    const savedAtt = localStorage.getItem('academy_attendance');
-    if (savedAtt) try { setAttendances(JSON.parse(savedAtt)); } catch(e){}
-  }, []);
-
-  useEffect(() => { if (isMounted) localStorage.setItem('academy_players', JSON.stringify(players)); }, [players, isMounted]);
-
+  // UI 交互状态
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [playerForm, setPlayerForm] = useState<any>(DEFAULT_PLAYER);
   const [activeTab, setActiveTab] = useState<'PROFILE' | 'CLASSES' | 'ATTENDANCE'>('PROFILE');
+  const [isSaving, setIsSaving] = useState(false); // 新增：防止重复点击提交
 
+  // 1. 初始化数据：从 Supabase 获取数据
   useEffect(() => {
-    const autoAdd = searchParams.get('autoAdd');
-    if (autoAdd === 'true' && isMounted) { setEditingId(null); setPlayerForm(DEFAULT_PLAYER); setActiveTab('PROFILE'); setIsModalOpen(true); }
-  }, [searchParams, isMounted]);
+    setIsMounted(true);
+    fetchData();
+  }, []);
 
-  const filteredPlayers = players.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.parentPhone.includes(searchQuery));
-  
-  const openProfileModal = (player: any) => { setEditingId(player.id); setPlayerForm({ ...player }); setActiveTab('PROFILE'); setIsModalOpen(true); };
+  const fetchData = async () => {
+    // 获取球员数据
+    const { data: playersData, error: playersError } = await supabase
+      .from('players')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-  const handleSavePlayer = () => {
-    if (!playerForm.name || !playerForm.parentName || !playerForm.parentPhone) return alert('Player Name and Parent Phone are required!');
-    if (editingId) setPlayers(players.map(p => p.id === editingId ? { ...p, ...playerForm } : p));
-    else setPlayers([{ id: `p${Date.now()}`, ...playerForm, status: 'ACTIVE' }, ...players]);
-    setIsModalOpen(false);
-  };
+    if (playersData) {
+      // 映射数据库字段（下划线）到前端状态字段（驼峰）
+      setPlayers(playersData.map((p: any) => ({
+        id: p.id,
+        name: p.full_name || p.name,
+        gender: p.gender,
+        dob: p.date_of_birth || p.dob,
+        parentName: p.parent_name || p.parentName,
+        parentPhone: p.parent_phone || p.parentPhone,
+        email: p.email,
+        address: p.address || p.notes,
+        status: p.status || 'ACTIVE'
+      })));
+    } else {
+      console.error('Error fetching players:', playersError);
+      // 如果没有连上数据库，提供一个默认数据方便开发
+      setPlayers([{ id: 'p1', name: 'Ahmad bin Ali', gender: 'Male', dob: '2014-05-12', parentName: 'Ali Bin Abu', parentPhone: '012-3456789', email: 'ali@example.com', address: 'Johor Bahru', status: 'ACTIVE' }]);
+    }
 
-  // 新增：安全删除球员功能
-  const handleDeletePlayer = (id: string, name: string) => {
-    if (window.confirm(`Are you sure you want to delete player "${name}"? This action cannot be undone.`)) {
-      setPlayers(players.filter(p => p.id !== id));
+    // 尝试获取课程和出勤记录，如果 Supabase 里相关表还没建好，安全回退到 localStorage
+    try {
+      const { data: classesData } = await supabase.from('classes').select('*');
+      const { data: playerClassData } = await supabase.from('player_class').select('*').eq('status', 'ACTIVE');
+      
+      if (classesData && classesData.length > 0) {
+        setAcademyClasses(classesData.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          monthlyFee: c.monthly_fee || c.monthlyFee,
+          enrolledPlayers: playerClassData 
+            ? playerClassData.filter((pc: any) => pc.class_id === c.id).map((pc: any) => ({ id: pc.player_id })) 
+            : []
+        })));
+      } else {
+        const savedClasses = localStorage.getItem('academy_classes');
+        if (savedClasses) setAcademyClasses(JSON.parse(savedClasses));
+      }
+
+      const { data: sessionsData } = await supabase.from('training_sessions').select('*');
+      const { data: attData } = await supabase.from('attendance').select('*');
+      
+      if (sessionsData && attData && sessionsData.length > 0) {
+        setAttendances(sessionsData.map((session: any) => ({
+          id: session.id,
+          date: session.date,
+          classId: session.class_id,
+          records: attData
+            .filter((a: any) => a.training_session_id === session.id)
+            .map((a: any) => ({ playerId: a.player_id, status: a.status }))
+        })));
+      } else {
+        const savedAtt = localStorage.getItem('academy_attendance');
+        if (savedAtt) setAttendances(JSON.parse(savedAtt));
+      }
+    } catch (e) {
+      console.log('Fallback to local storage for classes and attendance.');
+      const savedClasses = localStorage.getItem('academy_classes');
+      if (savedClasses) setAcademyClasses(JSON.parse(savedClasses));
+      const savedAtt = localStorage.getItem('academy_attendance');
+      if (savedAtt) setAttendances(JSON.parse(savedAtt));
     }
   };
 
+  // 监听 URL 参数自动弹窗
+  useEffect(() => {
+    const autoAdd = searchParams.get('autoAdd');
+    if (autoAdd === 'true' && isMounted) { 
+      setEditingId(null); 
+      setPlayerForm(DEFAULT_PLAYER); 
+      setActiveTab('PROFILE'); 
+      setIsModalOpen(true); 
+    }
+  }, [searchParams, isMounted]);
+
+  const filteredPlayers = players.filter(p => p.name?.toLowerCase().includes(searchQuery.toLowerCase()) || p.parentPhone?.includes(searchQuery));
+  
+  const openProfileModal = (player: any) => { setEditingId(player.id); setPlayerForm({ ...player }); setActiveTab('PROFILE'); setIsModalOpen(true); };
+
+  // 2. 保存/更新球员到 Supabase
+  const handleSavePlayer = async () => {
+    if (!playerForm.name || !playerForm.parentName || !playerForm.parentPhone) return alert('Player Name and Parent Phone are required!');
+    
+    setIsSaving(true);
+
+    const payload = {
+      full_name: playerForm.name,
+      gender: playerForm.gender,
+      date_of_birth: playerForm.dob || null, // Supabase 日期不能是空字符串
+      parent_name: playerForm.parentName,
+      parent_phone: playerForm.parentPhone,
+      email: playerForm.email,
+      address: playerForm.address,
+      status: playerForm.status || 'ACTIVE'
+    };
+
+    if (editingId) {
+      // Update 逻辑
+      const { error } = await supabase.from('players').update(payload).eq('id', editingId);
+      if (error) {
+        console.error('Update error:', error);
+        alert('Failed to update player');
+      } else {
+        setPlayers(players.map(p => p.id === editingId ? { ...p, ...playerForm } : p));
+        setIsModalOpen(false);
+      }
+    } else {
+      // Insert 逻辑
+      const { data, error } = await supabase.from('players').insert([payload]).select().single();
+      if (error) {
+        console.error('Insert error:', error);
+        alert('Failed to add player');
+      } else if (data) {
+        setPlayers([{ id: data.id, ...playerForm, status: 'ACTIVE' }, ...players]);
+        setIsModalOpen(false);
+      }
+    }
+    
+    setIsSaving(false);
+  };
+
+  // 3. 安全删除球员同步到 Supabase
+  const handleDeletePlayer = async (id: string, name: string) => {
+    if (window.confirm(`Are you sure you want to delete player "${name}"? This action cannot be undone.`)) {
+      const { error } = await supabase.from('players').delete().eq('id', id);
+      if (error) {
+        console.error('Delete error:', error);
+        alert('Failed to delete player');
+      } else {
+        setPlayers(players.filter(p => p.id !== id));
+      }
+    }
+  };
+
+  // ----- 以下数据计算逻辑保持原样 -----
   const playerEnrolledClasses = editingId ? academyClasses.filter(c => c.enrolledPlayers?.some((p: any) => p.id === editingId)) : [];
   const totalMonthlyFee = playerEnrolledClasses.reduce((sum, cls) => sum + (Number(cls.monthlyFee) || 0), 0);
 
@@ -114,7 +231,7 @@ function PlayersContent() {
         {filteredPlayers.map((player) => (
           <div key={player.id} onClick={() => openProfileModal(player)} className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-gray-100 active:scale-[0.99] transition-transform cursor-pointer relative">
             
-            {/* 新增：右上角的编辑和红色删除图标 */}
+            {/* 保留：右上角的编辑和红色删除图标 */}
             <div className="absolute top-5 right-5 flex items-center space-x-3">
                <button onClick={(e) => { e.stopPropagation(); openProfileModal(player); }} className="text-gray-300 hover:text-blue-500 transition-colors"><Edit3 size={18} /></button>
                <button 
@@ -129,7 +246,7 @@ function PlayersContent() {
             <div className="flex items-start space-x-4 pr-14">
               <div className="bg-blue-50 p-4 rounded-full"><User size={24} className="text-blue-600" /></div>
               <div className="w-full">
-                <p className="font-black text-gray-900 text-xl text-blue-700">{player.name}</p>
+                <p className="font-black text-blue-700 text-xl">{player.name}</p>
                 <span className="inline-flex text-[10px] font-black px-2.5 py-1 rounded-md mb-2 mt-1.5 bg-green-100 text-green-700">{player.status}</span>
                 <div className="bg-gray-50 p-3 rounded-2xl border border-gray-100/50 space-y-2">
                   <div className="flex justify-between items-center text-sm"><span className="text-gray-500 font-bold">Parent:</span><span className="font-bold text-gray-800">{player.parentName || 'N/A'}</span></div>
@@ -164,7 +281,6 @@ function PlayersContent() {
                 <div className="space-y-4 animate-in fade-in">
                   <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-5">
                     <h4 className="text-[11px] font-black text-blue-600 uppercase tracking-widest border-b border-gray-50 pb-2">Player Info</h4>
-                    {/* 修改为 PLAYER NAME */}
                     <div><label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Player Name <span className="text-red-500">*</span></label><input type="text" value={playerForm.name} onChange={(e) => setPlayerForm({...playerForm, name: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 font-bold text-[16px] text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" /></div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
@@ -201,6 +317,7 @@ function PlayersContent() {
                   {playerEnrolledClasses.map((cls: any) => (
                     <div key={cls.id} className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100"><h4 className="font-black text-lg">{cls.name}</h4><span className="font-black text-green-600 text-lg">RM {cls.monthlyFee}</span></div>
                   ))}
+                  {playerEnrolledClasses.length === 0 && <div className="text-center py-6 text-gray-400 font-bold text-sm">Not enrolled in any classes.</div>}
                 </div>
               )}
 
@@ -234,8 +351,13 @@ function PlayersContent() {
             </div>
 
             <div className="p-6 pb-12 border-t border-gray-100 shrink-0 bg-white">
-              <button type="button" onClick={handleSavePlayer} className="w-full bg-blue-600 text-white font-black text-lg py-4 rounded-2xl active:bg-blue-700 shadow-md">
-                {editingId ? 'Save Changes' : 'Confirm & Save'}
+              <button 
+                type="button" 
+                onClick={handleSavePlayer} 
+                disabled={isSaving}
+                className="w-full bg-blue-600 text-white font-black text-lg py-4 rounded-2xl active:bg-blue-700 shadow-md disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors"
+              >
+                {isSaving ? 'Saving...' : (editingId ? 'Save Changes' : 'Confirm & Save')}
               </button>
             </div>
           </div>
