@@ -158,10 +158,11 @@ function FeesContent() {
           </div>
         )}
 
+        {/* 核心修复：内联样式，不再依赖外部函数，彻底告别 TS2304 报错 */}
         <div className="flex bg-gray-200/60 p-1.5 rounded-2xl">
-          <button onClick={() => setActiveTab('UNPAID')} className={`flex-1 py-3 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all ${activeViewStyle(activeTab === 'UNPAID')}`}>UNPAID</button>
-          <button onClick={() => setActiveTab('PAID')} className={`flex-1 py-3 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all ${activeViewStyle(activeTab === 'PAID')}`}>PAID</button>
-          <button onClick={() => setActiveTab('ALL')} className={`flex-1 py-3 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all ${activeViewStyle(activeTab === 'ALL')}`}>ALL</button>
+          <button onClick={() => setActiveTab('UNPAID')} className={`flex-1 py-3 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'UNPAID' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>UNPAID</button>
+          <button onClick={() => setActiveTab('PAID')} className={`flex-1 py-3 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'PAID' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>PAID</button>
+          <button onClick={() => setActiveTab('ALL')} className={`flex-1 py-3 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'ALL' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>ALL</button>
         </div>
       </div>
 
