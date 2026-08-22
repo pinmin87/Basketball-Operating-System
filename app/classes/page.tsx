@@ -48,6 +48,13 @@ function ClassesContent() {
     setIsModalOpen(false);
   };
 
+  // 🌟 新增：安全删除班级功能
+  const handleDeleteClass = (id: string, name: string) => {
+    if (window.confirm(`Are you sure you want to delete the class "${name}"? This action cannot be undone.`)) {
+      setClasses(classes.filter(c => c.id !== id));
+    }
+  };
+
   const addSchedule = () => setClassForm({ ...classForm, schedules: [...(classForm.schedules || []), { day: 'Sunday', startTime: '09:00', endTime: '11:00' }] });
   const removeSchedule = (idx: number) => setClassForm({ ...classForm, schedules: (classForm.schedules || []).filter((_:any, i:number) => i !== idx) });
   const updateSchedule = (idx: number, field: string, value: string) => {
@@ -122,21 +129,32 @@ function ClassesContent() {
                   <span className="font-black text-green-700 text-base">RM {cls.monthlyFee}</span>
                 </div>
               </div>
+              
               <div className="mb-5 bg-gray-50 p-4 rounded-2xl border border-gray-100/50 space-y-2">
                 <div className="flex items-center text-sm text-gray-700 font-bold mb-2"><MapPin size={16} className="mr-2 text-blue-500" />{cls.venue || 'TBA'}</div>
                 {(cls.schedules || []).map((sch: any, idx: number) => (
                   <div key={idx} className="flex items-center text-sm text-gray-700 font-bold bg-white p-2 rounded-lg border border-gray-100"><Calendar size={14} className="mr-2 text-blue-500" /> <span className="w-24">{sch.day}</span><Clock size={14} className="mr-2 ml-2 text-blue-500" /> {formatTime(sch.startTime)} - {formatTime(sch.endTime)}</div>
                 ))}
               </div>
+              
               <div className="flex space-x-3">
-                <button onClick={() => openManagePlayers(cls)} className="flex-1 bg-blue-50 text-blue-700 font-black py-3.5 rounded-xl text-sm flex justify-center items-center active:bg-blue-100 transition-colors"><Users size={18} className="mr-2" />Manage Players ({cls.enrolledPlayers?.length || 0})</button>
-                <button onClick={() => { setEditingId(cls.id); setClassForm({ ...cls, schedules: cls.schedules || [{ day: 'Saturday', startTime: '09:00', endTime: '11:00' }] }); setIsModalOpen(true); }} className="px-5 bg-gray-50 text-gray-600 font-bold rounded-xl text-sm active:bg-gray-100 border border-gray-200">Edit</button>
+                <button onClick={() => openManagePlayers(cls)} className="flex-1 bg-blue-50 text-blue-700 font-black py-3.5 rounded-xl text-sm flex justify-center items-center active:bg-blue-100 transition-colors">
+                  <Users size={18} className="mr-2" />Manage Players ({cls.enrolledPlayers?.length || 0})
+                </button>
+                <button onClick={() => { setEditingId(cls.id); setClassForm({ ...cls, schedules: cls.schedules || [{ day: 'Saturday', startTime: '09:00', endTime: '11:00' }] }); setIsModalOpen(true); }} className="px-5 bg-gray-50 text-gray-600 font-bold rounded-xl text-sm active:bg-gray-100 border border-gray-200 transition-colors">
+                  Edit
+                </button>
+                {/* 🌟 新增的红色垃圾桶删除小按钮 */}
+                <button onClick={() => handleDeleteClass(cls.id, cls.name)} className="px-4 bg-red-50 text-red-500 font-bold rounded-xl flex items-center justify-center active:bg-red-100 border border-red-100 transition-colors" title="Delete Class">
+                  <Trash2 size={18} />
+                </button>
               </div>
             </div>
           ))
         )}
       </div>
 
+      {/* 以下是保持原样的弹窗代码 */}
       {isManagePlayersOpen && selectedClass && (
         <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[60] flex items-end justify-center">
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] shadow-2xl flex flex-col h-[85vh] animate-in slide-in-from-bottom-5">
