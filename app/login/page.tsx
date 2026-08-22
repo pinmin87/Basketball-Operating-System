@@ -2,10 +2,9 @@
 
 import { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { ShieldCheck, Mail, Lock, ArrowRight, Loader2, Play } from 'lucide-react';
+import { ShieldCheck, Mail, Lock, ArrowRight, Loader2, Play, Eye, EyeOff } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
-// 🚀 核心修复：直接在页面内初始化 Supabase，100% 避免路径找不到的 Error
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://knnpacipzzyvluchbykb.supabase.co';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtubnBhY2lwenp5dmx1Y2hieWtiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczODM2NjYsImV4cCI6MjEwMjk1OTY2Nn0.NnP85JAAv5KP-8_iWpEkgG_D9dwlbB68-mh-x6clNFA';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -17,7 +16,17 @@ export default function LoginPage() {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  
+  // 新增状态：控制密码是否可见
+  const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
+
+  // 核心业务逻辑：强密码校验规则
+  const validatePassword = (pwd: string) => {
+    // 至少8个字符，包含至少一个大写字母、一个数字和一个特殊字符
+    const strongPasswordRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    return strongPasswordRegex.test(pwd);
+  };
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,7 +39,13 @@ export default function LoginPage() {
         if (error) throw error;
         router.push('/');
       } else {
+        // 注册前的业务逻辑拦截
         if (!academyName.trim()) throw new Error('Academy Name is required.');
+        
+        // 密码强度校验 (仅在注册时拦截)
+        if (!validatePassword(password)) {
+          throw new Error('Password must be at least 8 characters, include an uppercase letter, a number, and a special symbol (e.g. @, $, !, %, *, ?, &).');
+        }
 
         const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
         if (authError) throw authError;
@@ -107,18 +122,27 @@ export default function LoginPage() {
             </div>
           </div>
 
+          {/* 🚀 UI 结构优化：带眼睛开关的密码输入框 */}
           <div>
             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Password</label>
             <div className="relative">
               <Lock size={18} className="absolute left-4 top-4 text-gray-500" />
               <input 
-                type="password" 
+                type={showPassword ? "text" : "password"} 
                 value={password} 
                 onChange={(e) => setPassword(e.target.value)} 
                 required 
                 placeholder="••••••••" 
-                className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-4 py-4 text-[16px] font-bold text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-white/50 backdrop-blur-sm transition-all" 
+                className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-12 py-4 text-[16px] font-bold text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-white/50 backdrop-blur-sm transition-all" 
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-4 text-gray-500 hover:text-white transition-colors"
+                title={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
           </div>
 
