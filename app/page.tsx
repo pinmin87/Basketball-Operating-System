@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Users, Calendar, CheckSquare, Wallet, Plus } from 'lucide-react';
+import { Users, Calendar, CheckSquare, Wallet } from 'lucide-react';
 
 export default function DashboardPage() {
   const [isMounted, setIsMounted] = useState(false);
@@ -14,33 +14,22 @@ export default function DashboardPage() {
   useEffect(() => {
     setIsMounted(true);
     
-    // 防崩溃读取 Players
     try {
       const savedPlayers = localStorage.getItem('academy_players');
       if (savedPlayers) {
         const parsed = JSON.parse(savedPlayers);
         if (Array.isArray(parsed)) setPlayersCount(parsed.length);
-      } else {
-        setPlayersCount(2);
-      }
-    } catch (e) {
-      console.error("Players parsing error", e);
-    }
+      } else setPlayersCount(1);
+    } catch (e) { console.error(e); }
 
-    // 防崩溃读取 Classes
     try {
       const savedClasses = localStorage.getItem('academy_classes');
       if (savedClasses) {
         const parsed = JSON.parse(savedClasses);
         if (Array.isArray(parsed)) setClassesCount(parsed.length);
-      } else {
-        setClassesCount(2);
-      }
-    } catch (e) {
-      console.error("Classes parsing error", e);
-    }
+      } else setClassesCount(1);
+    } catch (e) { console.error(e); }
 
-    // 防崩溃读取 Fees (白屏的罪魁祸首在此，已加护盾)
     try {
       const savedFees = localStorage.getItem('academy_fees');
       if (savedFees) {
@@ -49,122 +38,71 @@ export default function DashboardPage() {
           const col = fees.reduce((sum: number, f: any) => sum + (Number(f.amountPaid) || 0), 0);
           const exp = fees.reduce((sum: number, f: any) => sum + (Number(f.monthlyFee) || 0), 0);
           setFeesData({ collected: col, outstanding: exp - col });
-        } else {
-          setFeesData({ collected: 420, outstanding: 340 });
-        }
-      } else {
-        setFeesData({ collected: 420, outstanding: 340 });
-      }
-    } catch (e) {
-      console.error("Fees parsing error", e);
-      setFeesData({ collected: 420, outstanding: 340 });
-    }
+        } else setFeesData({ collected: 120, outstanding: 0 });
+      } else setFeesData({ collected: 120, outstanding: 0 });
+    } catch (e) { console.error(e); setFeesData({ collected: 120, outstanding: 0 }); }
   }, []);
 
   if (!isMounted) return <div className="h-full flex items-center justify-center"><p className="text-gray-400 font-bold animate-pulse">Loading Command Center...</p></div>;
 
   return (
-    // 移除 min-h-screen 和 max-w-md，让它完美融入 layout.tsx 的壳子里
     <main className="w-full bg-gray-50 pb-10">
-      
-      {/* 顶部蓝色品牌区 */}
       <header className="bg-blue-600 text-white p-6 pt-safe rounded-b-[2.5rem] shadow-md relative overflow-hidden">
         <div className="absolute top-[-50%] right-[-10%] w-64 h-64 bg-blue-500 rounded-full mix-blend-multiply filter blur-2xl opacity-60 pointer-events-none"></div>
-        
         <div className="flex justify-between items-center mb-6 relative z-10 pt-4">
-          <div>
-            <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest mb-1">Basketball Academy</p>
-            <h1 className="text-2xl font-black leading-none">Command Center</h1>
-          </div>
-          <div className="bg-white/20 px-3 py-1.5 rounded-xl text-[10px] font-black tracking-wider backdrop-blur-md border border-white/10 shadow-sm">
-            ACTIVE
-          </div>
+          <div><p className="text-[10px] font-black text-blue-200 uppercase tracking-widest mb-1">Basketball Academy</p><h1 className="text-2xl font-black leading-none">Command Center</h1></div>
+          <div className="bg-white/20 px-3 py-1.5 rounded-xl text-[10px] font-black tracking-wider backdrop-blur-md border border-white/10 shadow-sm">ACTIVE</div>
         </div>
-
         <div className="grid grid-cols-2 gap-3 relative z-10">
           <div className="bg-blue-700/40 p-4 rounded-2xl border border-blue-500/30 backdrop-blur-md">
             <p className="text-[10px] font-black uppercase tracking-wider text-blue-200 mb-1">Total Players</p>
-            <div className="flex items-center space-x-2 mt-1">
-              <Users size={20} className="text-blue-300" />
-              <span className="text-3xl font-black">{playersCount}</span>
-            </div>
+            <div className="flex items-center space-x-2 mt-1"><Users size={20} className="text-blue-300" /><span className="text-3xl font-black">{playersCount}</span></div>
           </div>
           <div className="bg-blue-700/40 p-4 rounded-2xl border border-blue-500/30 backdrop-blur-md">
             <p className="text-[10px] font-black uppercase tracking-wider text-blue-200 mb-1">Active Classes</p>
-            <div className="flex items-center space-x-2 mt-1">
-              <Calendar size={20} className="text-blue-300" />
-              <span className="text-3xl font-black">{classesCount}</span>
-            </div>
+            <div className="flex items-center space-x-2 mt-1"><Calendar size={20} className="text-blue-300" /><span className="text-3xl font-black">{classesCount}</span></div>
           </div>
         </div>
       </header>
 
-      {/* 主体内容区 */}
       <div className="p-5 space-y-5 relative z-10 mt-[-10px]">
-        
-        {/* 财务看板概览 */}
         <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-black text-gray-900 text-sm uppercase tracking-wider flex items-center">
-              <Wallet size={16} className="text-blue-600 mr-2" /> August 2026 Fees
-            </h3>
-          </div>
+          <div className="flex justify-between items-center mb-4"><h3 className="font-black text-gray-900 text-sm uppercase tracking-wider flex items-center"><Wallet size={16} className="text-blue-600 mr-2" /> August 2026 Fees</h3></div>
           <div className="grid grid-cols-2 gap-4 pt-3 border-t border-gray-50/80">
-            <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Collected</p>
-              <p className="text-xl font-black text-green-600">RM {feesData.collected}</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Outstanding</p>
-              <p className="text-xl font-black text-red-500">RM {feesData.outstanding}</p>
-            </div>
+            <div><p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Collected</p><p className="text-xl font-black text-green-600">RM {feesData.collected}</p></div>
+            <div><p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Outstanding</p><p className="text-xl font-black text-red-500">RM {feesData.outstanding}</p></div>
           </div>
         </div>
 
-        {/* 今日考勤概览 */}
         <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-black text-gray-900 text-sm uppercase tracking-wider flex items-center">
-              <CheckSquare size={16} className="text-blue-600 mr-2" /> Today's Attendance
-            </h3>
-          </div>
+          <div className="flex justify-between items-center mb-4"><h3 className="font-black text-gray-900 text-sm uppercase tracking-wider flex items-center"><CheckSquare size={16} className="text-blue-600 mr-2" /> Today's Attendance</h3></div>
           <div className="grid grid-cols-3 gap-2.5 pt-3 border-t border-gray-50/80 text-center">
-            <div className="bg-green-50 p-3 rounded-2xl border border-green-100/50">
-              <p className="text-xl font-black text-green-600 leading-none mb-1">{todayAttendance.present}</p>
-              <p className="text-[9px] font-black text-green-600/70 uppercase tracking-wider">Present</p>
-            </div>
-            <div className="bg-red-50 p-3 rounded-2xl border border-red-100/50">
-              <p className="text-xl font-black text-red-600 leading-none mb-1">{todayAttendance.absent}</p>
-              <p className="text-[9px] font-black text-red-600/70 uppercase tracking-wider">Absent</p>
-            </div>
-            <div className="bg-orange-50 p-3 rounded-2xl border border-orange-100/50">
-              <p className="text-xl font-black text-orange-500 leading-none mb-1">{todayAttendance.late}</p>
-              <p className="text-[9px] font-black text-orange-500/70 uppercase tracking-wider">Late</p>
-            </div>
+            <div className="bg-green-50 p-3 rounded-2xl border border-green-100/50"><p className="text-xl font-black text-green-600 leading-none mb-1">{todayAttendance.present}</p><p className="text-[9px] font-black text-green-600/70 uppercase tracking-wider">Present</p></div>
+            <div className="bg-red-50 p-3 rounded-2xl border border-red-100/50"><p className="text-xl font-black text-red-600 leading-none mb-1">{todayAttendance.absent}</p><p className="text-[9px] font-black text-red-600/70 uppercase tracking-wider">Absent</p></div>
+            <div className="bg-orange-50 p-3 rounded-2xl border border-orange-100/50"><p className="text-xl font-black text-orange-500 leading-none mb-1">{todayAttendance.late}</p><p className="text-[9px] font-black text-orange-500/70 uppercase tracking-wider">Late</p></div>
           </div>
         </div>
 
-        {/* 快捷操作区 */}
         <div>
           <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-1">Quick Actions</h3>
           <div className="grid grid-cols-2 gap-3">
-            <Link href="/players?autoAdd=true" className="bg-blue-600 text-white p-4 rounded-3xl shadow-[0_4px_14px_0_rgba(37,99,235,0.25)] flex flex-col justify-between active:scale-95 transition-all hover:bg-blue-700 h-28">
-              <Plus size={22} className="mb-2 text-blue-200" />
+            {/* 修改：点击直接进入 /players，不带参数 */}
+            <Link href="/players" className="bg-blue-600 text-white p-4 rounded-3xl shadow-[0_4px_14px_0_rgba(37,99,235,0.25)] flex flex-col justify-between active:scale-95 transition-all hover:bg-blue-700 h-28">
+              <Users size={22} className="mb-2 text-blue-200" />
               <div>
-                <p className="font-black text-sm mb-0.5">Add Player</p>
-                <p className="text-[9px] text-blue-200/80 font-bold uppercase tracking-wider">Register new</p>
+                <p className="font-black text-sm mb-0.5">Players</p>
+                <p className="text-[9px] text-blue-200/80 font-bold uppercase tracking-wider">Manage All</p>
               </div>
             </Link>
             <Link href="/attendance" className="bg-white text-gray-900 p-4 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between active:scale-95 transition-all hover:border-blue-200 h-28">
               <CheckSquare size={22} className="mb-2 text-blue-600" />
               <div>
                 <p className="font-black text-sm mb-0.5">Take Attendance</p>
-                <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Mark daily session</p>
+                <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Mark Session</p>
               </div>
             </Link>
           </div>
         </div>
-
       </div>
     </main>
   );

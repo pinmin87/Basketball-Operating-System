@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Search, Plus, User, Phone, X, Edit3, Wallet, Clock, CheckCircle2, XCircle, History, Mail, MapPin } from 'lucide-react';
+import { Search, Plus, User, Phone, X, Edit3, Wallet, Clock, CheckCircle2, XCircle, History, Mail, MapPin, Trash2 } from 'lucide-react';
 
 const formatTime = (time24: string) => {
   if (!time24) return '';
@@ -48,6 +48,7 @@ function PlayersContent() {
   }, [searchParams, isMounted]);
 
   const filteredPlayers = players.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.parentPhone.includes(searchQuery));
+  
   const openProfileModal = (player: any) => { setEditingId(player.id); setPlayerForm({ ...player }); setActiveTab('PROFILE'); setIsModalOpen(true); };
 
   const handleSavePlayer = () => {
@@ -55,6 +56,13 @@ function PlayersContent() {
     if (editingId) setPlayers(players.map(p => p.id === editingId ? { ...p, ...playerForm } : p));
     else setPlayers([{ id: `p${Date.now()}`, ...playerForm, status: 'ACTIVE' }, ...players]);
     setIsModalOpen(false);
+  };
+
+  // 新增：删除球员功能 (防误删提示)
+  const handleDeletePlayer = (id: string, name: string) => {
+    if (window.confirm(`Are you sure you want to delete player "${name}"? This action cannot be undone.`)) {
+      setPlayers(players.filter(p => p.id !== id));
+    }
   };
 
   const playerEnrolledClasses = editingId ? academyClasses.filter(c => c.enrolledPlayers?.some((p: any) => p.id === editingId)) : [];
@@ -105,8 +113,20 @@ function PlayersContent() {
       <div className="p-4 space-y-4">
         {filteredPlayers.map((player) => (
           <div key={player.id} onClick={() => openProfileModal(player)} className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-gray-100 active:scale-[0.99] transition-transform cursor-pointer relative">
-            <div className="absolute top-5 right-5 text-gray-300"><Edit3 size={18} /></div>
-            <div className="flex items-start space-x-4 pr-8">
+            
+            {/* 新增：右上角的 编辑 和 删除 图标 */}
+            <div className="absolute top-5 right-5 flex items-center space-x-3">
+               <button className="text-gray-300 hover:text-blue-500 transition-colors"><Edit3 size={18} /></button>
+               <button 
+                 onClick={(e) => { e.stopPropagation(); handleDeletePlayer(player.id, player.name); }} 
+                 className="text-gray-300 hover:text-red-500 transition-colors"
+                 title="Delete Player"
+               >
+                 <Trash2 size={18} />
+               </button>
+            </div>
+
+            <div className="flex items-start space-x-4 pr-14">
               <div className="bg-blue-50 p-4 rounded-full"><User size={24} className="text-blue-600" /></div>
               <div className="w-full">
                 <p className="font-black text-gray-900 text-xl text-blue-700">{player.name}</p>
@@ -143,7 +163,6 @@ function PlayersContent() {
                 <div className="space-y-4 animate-in fade-in">
                   <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-5">
                     <h4 className="text-[11px] font-black text-blue-600 uppercase tracking-widest border-b border-gray-50 pb-2">Player Info</h4>
-                    {/* 修改为 PLAYER NAME */}
                     <div><label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Player Name <span className="text-red-500">*</span></label><input type="text" value={playerForm.name} onChange={(e) => setPlayerForm({...playerForm, name: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 font-bold text-[16px] text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none" /></div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>

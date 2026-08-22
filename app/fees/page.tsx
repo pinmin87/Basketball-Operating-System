@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { Search, CheckCircle2, AlertCircle, UploadCloud, Calendar, X, CalendarRange, Download, ShieldCheck, Filter } from 'lucide-react';
 
-export default function FeesPage() {
+function FeesContent() {
   const [isMounted, setIsMounted] = useState(false);
   const [feeRecords, setFeeRecords] = useState<any[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
@@ -225,7 +225,6 @@ export default function FeesPage() {
                 </div>
               </div>
 
-              {/* 去掉了中文，保留了纯英文 */}
               <div>
                 <label className="block text-[11px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Payment Method</label>
                 <select value={paymentMethod} onChange={e=>setPaymentMethod(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-4 font-bold text-[16px] text-gray-900 focus:ring-2 focus:ring-blue-500 outline-none appearance-none">
@@ -237,7 +236,6 @@ export default function FeesPage() {
                 </select>
               </div>
 
-              {/* 完美恢复 Upload Receipt 的 UI 按键！ */}
               <div>
                 <label className="block text-[11px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Receipt / Reference No.</label>
                 <div className="flex space-x-2">
@@ -261,6 +259,4 @@ export default function FeesPage() {
   );
 }
 
-function activeViewStyle(isActive: boolean) {
-  return isActive ? 'bg-white text-gray-900 shadow-md' : 'text-gray-500 hover:text-gray-700';
-}
+export default function FeesPage() { return <Suspense fallback={<div>Loading...</div>}><FeesContent /></Suspense>; }

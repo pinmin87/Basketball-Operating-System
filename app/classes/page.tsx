@@ -48,7 +48,6 @@ function ClassesContent() {
     setIsModalOpen(false);
   };
 
-  // 修复旧数据没有 schedules 导致的卡死 Bug
   const addSchedule = () => setClassForm({ ...classForm, schedules: [...(classForm.schedules || []), { day: 'Sunday', startTime: '09:00', endTime: '11:00' }] });
   const removeSchedule = (idx: number) => setClassForm({ ...classForm, schedules: (classForm.schedules || []).filter((_:any, i:number) => i !== idx) });
   const updateSchedule = (idx: number, field: string, value: string) => {
@@ -131,7 +130,6 @@ function ClassesContent() {
               </div>
               <div className="flex space-x-3">
                 <button onClick={() => openManagePlayers(cls)} className="flex-1 bg-blue-50 text-blue-700 font-black py-3.5 rounded-xl text-sm flex justify-center items-center active:bg-blue-100 transition-colors"><Users size={18} className="mr-2" />Manage Players ({cls.enrolledPlayers?.length || 0})</button>
-                {/* 修复：点击 Edit 时，如果旧数据没 schedules，自动生成默认的 */}
                 <button onClick={() => { setEditingId(cls.id); setClassForm({ ...cls, schedules: cls.schedules || [{ day: 'Saturday', startTime: '09:00', endTime: '11:00' }] }); setIsModalOpen(true); }} className="px-5 bg-gray-50 text-gray-600 font-bold rounded-xl text-sm active:bg-gray-100 border border-gray-200">Edit</button>
               </div>
             </div>
