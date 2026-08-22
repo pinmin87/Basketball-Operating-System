@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Users, Calendar, CheckSquare, Wallet, LogOut } from 'lucide-react';
-import { supabase } from '@/lib/supabase'; // 确保引入了supabase实例
+import { supabase } from './supabaseClient'; // ✅ 修复点：使用绝对安全的相对路径
 
 export default function DashboardPage() {
   const [isMounted, setIsMounted] = useState(false);
@@ -15,7 +15,6 @@ export default function DashboardPage() {
   useEffect(() => {
     setIsMounted(true);
     
-    // 初始化数据
     try {
       const savedPlayers = localStorage.getItem('academy_players');
       if (savedPlayers) {
@@ -33,7 +32,6 @@ export default function DashboardPage() {
     } catch (e) {}
   }, []);
 
-  // 注销处理函数
   const handleLogout = async () => {
     await supabase.auth.signOut();
     window.location.href = '/login';
@@ -46,7 +44,6 @@ export default function DashboardPage() {
       <header className="bg-blue-600 text-white p-6 pt-safe rounded-b-[2.5rem] shadow-md relative overflow-hidden">
         <div className="absolute top-[-50%] right-[-10%] w-64 h-64 bg-blue-500 rounded-full mix-blend-multiply filter blur-2xl opacity-60 pointer-events-none"></div>
         
-        {/* 标题栏与注销按钮 */}
         <div className="flex justify-between items-center mb-6 relative z-10 pt-4">
           <div>
             <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest mb-1">Basketball Academy</p>
@@ -74,7 +71,6 @@ export default function DashboardPage() {
       </header>
 
       <div className="p-5 space-y-5 relative z-10 mt-[-10px]">
-        {/* Fees 概览卡片 */}
         <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
           <div className="flex justify-between items-center mb-4">
             <h3 className="font-black text-gray-900 text-sm uppercase tracking-wider flex items-center">
@@ -87,7 +83,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 考勤概览卡片 */}
         <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
           <div className="flex justify-between items-center mb-4">
             <h3 className="font-black text-gray-900 text-sm uppercase tracking-wider flex items-center">
@@ -101,7 +96,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 快捷操作区 */}
         <div>
           <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-1">Quick Actions</h3>
           <div className="grid grid-cols-2 gap-3">
