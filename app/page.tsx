@@ -3,7 +3,12 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Users, Calendar, CheckSquare, Wallet, LogOut } from 'lucide-react';
-import { supabase } from './supabaseClient'; // ✅ 修复点：使用绝对安全的相对路径
+import { createClient } from '@supabase/supabase-js';
+
+// 🚀 核心修复：直接在页面内初始化 Supabase，100% 避免路径找不到的 Error
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://knnpacipzzyvluchbykb.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtubnBhY2lwenp5dmx1Y2hieWtiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczODM2NjYsImV4cCI6MjEwMjk1OTY2Nn0.NnP85JAAv5KP-8_iWpEkgG_D9dwlbB68-mh-x6clNFA';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function DashboardPage() {
   const [isMounted, setIsMounted] = useState(false);
@@ -37,7 +42,7 @@ export default function DashboardPage() {
     window.location.href = '/login';
   };
 
-  if (!isMounted) return <div className="h-full flex items-center justify-center"><p className="text-gray-400 font-bold animate-pulse">Loading...</p></div>;
+  if (!isMounted) return <div className="h-full flex items-center justify-center"><p className="text-gray-400 font-bold animate-pulse">Loading Command Center...</p></div>;
 
   return (
     <main className="w-full bg-gray-50 pb-10">
