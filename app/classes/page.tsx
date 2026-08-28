@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, Plus, MapPin, Clock, Users, CalendarDays, Edit3, Trash2, Loader2, DollarSign, X } from 'lucide-react';
+import { Search, Plus, MapPin, Clock, Users, CalendarDays, Edit3, Trash2, Loader2, DollarSign, X, UserPlus, UserMinus } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase
@@ -21,14 +21,23 @@ export default function ClassesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [academyId, setAcademyId] = useState<string | null>(null);
 
+  // Class State
   const [classes, setClasses] = useState<any[]>([]);
   const [enrolledCounts, setEnrolledCounts] = useState<Record<string, number>>({});
-
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Class Form Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [classForm, setClassForm] = useState<any>(DEFAULT_CLASS);
   const [isSaving, setIsSaving] = useState(false);
+
+  // 🚀 Manage Players Modal State
+  const [isManagePlayersOpen, setIsManagePlayersOpen] = useState(false);
+  const [currentManageClass, setCurrentManageClass] = useState<any>(null);
+  const [allPlayers, setAllPlayers] = useState<any[]>([]);
+  const [classPlayers, setClassPlayers] = useState<string[]>([]); // Array of player IDs currently in the class
+  const [playerSearchQuery, setPlayerSearchQuery] = useState('');
 
   useEffect(() => {
     setIsMounted(true);
@@ -150,6 +159,87 @@ export default function ClassesPage() {
     setIsModalOpen(true);
   };
 
+  // 🚀 Open Manage Players Modal
+  const openManagePlayersModal = async (cls: any) => {
+    setCurrentManageClass(cls);
+    setIsManagePlayersOpen(true);
+    setPlayerSearchQuery('');
+    
+    if (!academyId) return;
+
+    try {
+      // 1. Fetch all active players in the academy
+      const { data: playersData } = await supabase
+        .from('players')
+        .select('id, name, parent_phone')
+        .eq('academy_id', academyId)
+        .eq('status', 'ACTIVE')
+        .order('name');
+      
+      setAllPlayers(playersData || []);
+
+      // 2. Fetch players currently enrolled in THIS class
+      const { data: enrollmentData } = await supabase
+        .from('player_class')
+        .select('player_id')
+        .eq('class_id', cls.id)
+        .eq('status', 'ACTIVE');
+
+      const enrolledIds = enrollmentData ? enrollmentData.map(e => e.player_id) : [];
+      setClassPlayers(enrolledIds);
+    } catch (error) {
+      console.error('Error fetching players for management:', error);
+    }
+  };
+
+  // 🚀 Toggle Player in Class (Optimistic Update for speed)
+  const togglePlayerInClass = async (playerId: string, isCurrentlyEnrolled: boolean) => {
+    const classId = currentManageClass.id;
+    const newStatus = isCurrentlyEnrolled ? 'INACTIVE' : 'ACTIVE';
+
+    // 1. Optimistic UI Update (Makes it feel instant)
+    if (isCurrentlyEnrolled) {
+      setClassPlayers(prev => prev.filter(id => id !== playerId));
+      setEnrolledCounts(prev => ({...prev, [classId]: Math.max(0, (prev[classId] || 1) - 1)}));
+    } else {
+      setClassPlayers(prev => [...prev, playerId]);
+      setEnrolledCounts(prev => ({...prev, [classId]: (prev[classId] || 0) + 1}));
+    }
+
+    // 2. Background Database Sync
+    try {
+      // Check if a record already exists
+      const { data: existingRecord } = await supabase
+        .from('player_class')
+        .select('id')
+        .eq('player_id', playerId)
+        .eq('class_id', classId)
+        .single();
+
+      if (existingRecord) {
+        // Update existing record
+        await supabase
+          .from('player_class')
+          .update({ status: newStatus })
+          .eq('id', existingRecord.id);
+      } else {
+        // Insert new record
+        await supabase
+          .from('player_class')
+          .insert([{
+            academy_id: academyId,
+            player_id: playerId,
+            class_id: classId,
+            status: newStatus
+          }]);
+      }
+    } catch (error) {
+      console.error('Failed to toggle player status:', error);
+      alert('Network error. Failed to sync player status.');
+      // Ideally revert the optimistic update here if needed
+    }
+  };
+
   const formatTime12h = (time24: string) => {
     if (!time24) return '';
     const [hourString, minute] = time24.split(':');
@@ -159,6 +249,11 @@ export default function ClassesPage() {
   };
 
   if (!isMounted) return <div className="h-full flex items-center justify-center"><p className="text-gray-400 font-bold">Loading...</p></div>;
+
+  const filteredModalPlayers = allPlayers.filter(p => 
+    p.name.toLowerCase().includes(playerSearchQuery.toLowerCase()) || 
+    (p.parent_phone && p.parent_phone.includes(playerSearchQuery))
+  );
 
   return (
     <div className="bg-gray-50 min-h-full pb-10">
@@ -188,18 +283,18 @@ export default function ClassesPage() {
               const isFull = enrolledCount >= (cls.capacity || 20);
               
               return (
-                <div key={cls.id} onClick={() => openEditModal(cls)} className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-gray-100 active:scale-[0.99] transition-transform cursor-pointer relative overflow-hidden">
+                <div key={cls.id} className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-gray-100 relative overflow-hidden">
                   
                   <div className="absolute top-4 right-4 flex items-center space-x-2">
-                    <button onClick={(e) => { e.stopPropagation(); openEditModal(cls); }} className="p-1.5 text-gray-300 hover:text-blue-500 bg-gray-50 rounded-lg"><Edit3 size={16} /></button>
-                    <button onClick={(e) => { e.stopPropagation(); handleDeleteClass(cls.id, cls.name); }} className="p-1.5 text-gray-300 hover:text-red-500 bg-gray-50 rounded-lg"><Trash2 size={16} /></button>
+                    <button onClick={(e) => { e.stopPropagation(); openEditModal(cls); }} className="p-1.5 text-gray-300 hover:text-blue-500 bg-gray-50 rounded-lg transition-colors"><Edit3 size={16} /></button>
+                    <button onClick={(e) => { e.stopPropagation(); handleDeleteClass(cls.id, cls.name); }} className="p-1.5 text-gray-300 hover:text-red-500 bg-gray-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
                   </div>
 
-                  <div className="pr-16">
+                  <div className="pr-16 mb-4">
                     <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">{cls.skill_level}</p>
                     <h3 className="font-black text-xl text-gray-900 mb-3">{cls.name}</h3>
                     
-                    <div className="space-y-1.5 mb-4 bg-gray-50 p-3 rounded-2xl border border-gray-100/50">
+                    <div className="space-y-1.5 bg-gray-50 p-3 rounded-2xl border border-gray-100/50">
                       {/* Schedule 1 */}
                       <div className="flex flex-col">
                         <div className="flex items-center text-[13px] text-gray-800 font-bold">
@@ -226,13 +321,17 @@ export default function ClassesPage() {
                     </div>
                   </div>
 
-                  <div className="pt-2 flex justify-between items-center">
-                    <div className="flex items-center space-x-1.5">
-                      <Users size={16} className={isFull ? "text-red-500" : "text-green-500"} />
-                      <span className={`text-xs font-black ${isFull ? "text-red-600" : "text-gray-500"}`}>
+                  <div className="pt-4 border-t border-gray-100 flex justify-between items-center">
+                    {/* 🚀 Clickable Manage Players Button */}
+                    <button 
+                      onClick={() => openManagePlayersModal(cls)}
+                      className="flex items-center space-x-2 bg-blue-50 hover:bg-blue-100 active:bg-blue-200 px-3 py-2 rounded-xl transition-colors"
+                    >
+                      <Users size={16} className={isFull ? "text-red-500" : "text-blue-500"} />
+                      <span className={`text-xs font-black ${isFull ? "text-red-600" : "text-blue-700"}`}>
                         {enrolledCount} / {cls.capacity || 20} Students
                       </span>
-                    </div>
+                    </button>
                     <div className="bg-green-50 px-3 py-1.5 rounded-xl border border-green-100/50">
                       <span className="font-black text-green-700">RM {cls.monthly_fee}</span><span className="text-[9px] text-green-600/70 font-bold ml-1 uppercase">/mth</span>
                     </div>
@@ -245,6 +344,67 @@ export default function ClassesPage() {
         )}
       </div>
 
+      {/* 🚀 MANAGE PLAYERS MODAL */}
+      {isManagePlayersOpen && currentManageClass && (
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[70] flex items-end justify-center">
+          <div className="bg-gray-50 w-full max-w-md rounded-t-[2.5rem] shadow-2xl flex flex-col h-[90vh] animate-in slide-in-from-bottom-5">
+            <div className="p-6 border-b border-gray-200 shrink-0 bg-white rounded-t-[2.5rem]">
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h3 className="font-black text-2xl text-gray-900">Manage Students</h3>
+                  <p className="text-sm font-bold text-blue-600 mt-1">{currentManageClass.name}</p>
+                </div>
+                <button onClick={() => setIsManagePlayersOpen(false)} className="bg-gray-100 text-gray-400 rounded-full p-2.5 active:bg-gray-200"><X size={20} /></button>
+              </div>
+              <div className="relative">
+                <Search size={18} className="absolute left-4 top-3.5 text-gray-400" />
+                <input 
+                  type="text" 
+                  placeholder="Search players by name or phone..." 
+                  value={playerSearchQuery} 
+                  onChange={(e) => setPlayerSearchQuery(e.target.value)} 
+                  className="w-full bg-gray-100 text-gray-900 placeholder-gray-400 rounded-2xl pl-11 pr-4 py-3.5 text-[16px] focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                />
+              </div>
+            </div>
+            
+            <div className="p-4 overflow-y-auto flex-1 space-y-3">
+              {filteredModalPlayers.length === 0 ? (
+                 <div className="text-center py-10 text-gray-400 font-bold text-sm">No active players found in the academy.</div>
+              ) : (
+                filteredModalPlayers.map(player => {
+                  const isEnrolled = classPlayers.includes(player.id);
+                  return (
+                    <div key={player.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
+                      <div>
+                        <p className="font-black text-gray-900 text-[16px]">{player.name}</p>
+                        <p className="text-xs font-bold text-gray-400 mt-0.5">{player.parent_phone || 'No Phone'}</p>
+                      </div>
+                      
+                      <button
+                        onClick={() => togglePlayerInClass(player.id, isEnrolled)}
+                        className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-xl font-black text-sm transition-all active:scale-95 ${
+                          isEnrolled 
+                            ? 'bg-red-50 text-red-600 border border-red-100 hover:bg-red-100' 
+                            : 'bg-blue-600 text-white shadow-md hover:bg-blue-700'
+                        }`}
+                      >
+                        {isEnrolled ? (
+                          <><UserMinus size={16} /><span>Remove</span></>
+                        ) : (
+                          <><UserPlus size={16} /><span>Add</span></>
+                        )}
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CREATE / EDIT CLASS MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[60] flex items-end justify-center">
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] shadow-2xl flex flex-col h-[90vh] animate-in slide-in-from-bottom-5">
