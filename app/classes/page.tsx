@@ -27,6 +27,7 @@ export default function ClassesPage() {
   const [classForm, setClassForm] = useState<any>(DEFAULT_CLASS);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Manage Players Modal States
   const [isManagePlayersOpen, setIsManagePlayersOpen] = useState(false);
   const [currentManageClass, setCurrentManageClass] = useState<any>(null);
   const [allPlayers, setAllPlayers] = useState<any[]>([]);
@@ -34,6 +35,8 @@ export default function ClassesPage() {
   const [draftClassPlayers, setDraftClassPlayers] = useState<string[]>([]); 
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
   const [isSavingPlayers, setIsSavingPlayers] = useState(false);
+  // 🚀 新增：用于弹窗内部的数据加载状态
+  const [isFetchingModalData, setIsFetchingModalData] = useState(false); 
 
   useEffect(() => {
     setIsMounted(true);
@@ -59,7 +62,6 @@ export default function ClassesPage() {
         if (enrollmentData) {
           const counts: Record<string, number> = {};
           enrollmentData.forEach((row: any) => {
-            // 🚀 防御性编程：强制去除空格并大写，防止脏数据
             if (row.status && String(row.status).trim().toUpperCase() === 'ACTIVE') {
               counts[row.class_id] = (counts[row.class_id] || 0) + 1;
             }
@@ -172,11 +174,19 @@ export default function ClassesPage() {
     setIsModalOpen(true);
   };
 
+  // 🚀 核心修复：重构打开弹窗的逻辑，确保数据读取完毕后再渲染
   const openManagePlayersModal = async (cls: any) => {
     setCurrentManageClass(cls);
     setIsManagePlayersOpen(true);
     setPlayerSearchQuery('');
-    if (!academyId) return;
+    setIsFetchingModalData(true); // 开启 Loading
+    setDraftClassPlayers([]); // 强制清空旧草稿
+    setClassPlayers([]); 
+
+    if (!academyId) {
+      setIsFetchingModalData(false);
+      return;
+    }
 
     try {
       const { data: playersData } = await supabase.from('players').select('id, name, parent_phone').eq('academy_id', academyId).eq('status', 'ACTIVE').order('name');
@@ -184,7 +194,6 @@ export default function ClassesPage() {
 
       const { data: enrollmentData } = await supabase.from('player_class').select('player_id, status').eq('class_id', cls.id);
       
-      // 🚀 核心修复：强制转为 String，根除 Number 与 String 比较失败的 Bug
       const enrolledIds = enrollmentData 
         ? enrollmentData.filter(e => e.status && String(e.status).trim().toUpperCase() === 'ACTIVE').map(e => String(e.player_id)) 
         : [];
@@ -193,10 +202,11 @@ export default function ClassesPage() {
       setDraftClassPlayers(enrolledIds);
     } catch (error) {
       console.error('Error fetching players:', error);
+    } finally {
+      setIsFetchingModalData(false); // 关闭 Loading，正式渲染真实数据
     }
   };
 
-  // 🚀 核心修复：点击状态切换，强制转换为 String 确保安全
   const togglePlayerDraft = (playerId: any, isCurrentlyEnrolled: boolean) => {
     const strId = String(playerId);
     if (isCurrentlyEnrolled) {
@@ -256,7 +266,8 @@ export default function ClassesPage() {
       setEnrolledCounts(prev => ({...prev, [classId]: draftClassPlayers.length}));
       setIsManagePlayersOpen(false);
       
-      alert('Players updated successfully!');
+      // 保存完顺便刷新外层卡片的统计数据
+      fetchClasses();
 
     } catch (error) {
       console.error('Failed to sync player status with database:', error);
@@ -298,7 +309,6 @@ export default function ClassesPage() {
 
   const filteredModalPlayers = allPlayers.filter(p => p.name.toLowerCase().includes(playerSearchQuery.toLowerCase()) || (p.parent_phone && p.parent_phone.includes(playerSearchQuery)));
 
-  // 🚀 核心 UX 优化：将筛选后的球员分为“已加入”和“待加入”两组
   const enrolledModalPlayers = filteredModalPlayers.filter(p => draftClassPlayers.includes(String(p.id)));
   const availableModalPlayers = filteredModalPlayers.filter(p => !draftClassPlayers.includes(String(p.id)));
 
@@ -382,11 +392,16 @@ export default function ClassesPage() {
             </div>
             
             <div className="p-4 overflow-y-auto flex-1 space-y-6">
-              {filteredModalPlayers.length === 0 ? (
+              {/* 🚀 核心修复：如果是抓取中，显示 Loading */}
+              {isFetchingModalData ? (
+                <div className="flex flex-col items-center justify-center py-20 opacity-50">
+                  <Loader2 size={32} className="animate-spin text-blue-500 mb-4" />
+                  <p className="text-xs font-bold text-gray-500">Loading players...</p>
+                </div>
+              ) : filteredModalPlayers.length === 0 ? (
                  <div className="text-center py-10 text-gray-400 font-bold text-sm">No players found.</div>
               ) : (
                 <>
-                  {/* 区块 1：已经加入的球员 (在上方) */}
                   {enrolledModalPlayers.length > 0 && (
                     <div className="space-y-3">
                       <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Added Players ({enrolledModalPlayers.length})</h4>
@@ -404,7 +419,6 @@ export default function ClassesPage() {
                     </div>
                   )}
 
-                  {/* 区块 2：等待加入的球员 (在下方) */}
                   {availableModalPlayers.length > 0 && (
                     <div className="space-y-3">
                       <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Available Players ({availableModalPlayers.length})</h4>
@@ -428,7 +442,7 @@ export default function ClassesPage() {
             <div className="p-6 pb-safe border-t border-gray-100 shrink-0 bg-white shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
               <button 
                 onClick={handleSavePlayers} 
-                disabled={isSavingPlayers} 
+                disabled={isSavingPlayers || isFetchingModalData} 
                 className="w-full bg-blue-600 text-white font-black text-lg py-4 rounded-2xl flex items-center justify-center space-x-2 active:bg-blue-700 shadow-md disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors"
               >
                 {isSavingPlayers ? <Loader2 size={24} className="animate-spin" /> : <Save size={20} />}
