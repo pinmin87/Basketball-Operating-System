@@ -55,7 +55,6 @@ export default function ClassesPage() {
         if (error) throw error;
         setClasses(classesData || []);
 
-        // ✅ 核心修复 1: 使用 JS 兼容旧数据的 Active 大小写问题
         const { data: enrollmentData } = await supabase.from('player_class').select('class_id, status').eq('academy_id', currentAcademyId);
         if (enrollmentData) {
           const counts: Record<string, number> = {};
@@ -182,7 +181,6 @@ export default function ClassesPage() {
       const { data: playersData } = await supabase.from('players').select('id, name, parent_phone').eq('academy_id', academyId).eq('status', 'ACTIVE').order('name');
       setAllPlayers(playersData || []);
 
-      // ✅ 核心修复 2: 取消严格匹配，用 JS 过滤，确保旧数据也被抓取并显示为 Remove
       const { data: enrollmentData } = await supabase.from('player_class').select('player_id, status').eq('class_id', cls.id);
       
       const enrolledIds = enrollmentData 
@@ -204,6 +202,7 @@ export default function ClassesPage() {
     }
   };
 
+  // 🚀 核心 Bug 修复：防崩溃的暴力保存逻辑
   const handleSavePlayers = async () => {
     if (!currentManageClass || !academyId) return;
     setIsSavingPlayers(true);
@@ -214,33 +213,51 @@ export default function ClassesPage() {
     const playersToActivate = draftClassPlayers.filter(id => !classPlayers.includes(id));
 
     try {
+      // 1. 移除球员 (Deactivate)：摒弃 maybeSingle，直接暴力批量更新所有匹配的行
       for (const pid of playersToDeactivate) {
-        const { data: existing } = await supabase.from('player_class').select('id').eq('player_id', pid).eq('class_id', classId).maybeSingle();
-        if (existing) {
-          await supabase.from('player_class').update({ status: 'INACTIVE', end_date: todayStr }).eq('id', existing.id);
-        }
+        const { error: updateError } = await supabase
+          .from('player_class')
+          .update({ status: 'INACTIVE', end_date: todayStr })
+          .eq('player_id', pid)
+          .eq('class_id', classId);
+          
+        if (updateError) throw updateError;
       }
 
+      // 2. 增加球员 (Activate)：先尝试查他是不是以前来过（限制只拿1条，避免崩溃）
       for (const pid of playersToActivate) {
-        const { data: existing } = await supabase.from('player_class').select('id').eq('player_id', pid).eq('class_id', classId).maybeSingle();
-        if (existing) {
-          await supabase.from('player_class').update({ status: 'ACTIVE', end_date: null }).eq('id', existing.id);
+        const { data: existingRecords } = await supabase
+          .from('player_class')
+          .select('id')
+          .eq('player_id', pid)
+          .eq('class_id', classId)
+          .limit(1); // 🚀 关键修复：用 limit(1) 替代会崩溃的 maybeSingle()
+
+        if (existingRecords && existingRecords.length > 0) {
+          // 如果他以前来过这个班，就把历史记录重新激活
+          await supabase
+            .from('player_class')
+            .update({ status: 'ACTIVE', end_date: null })
+            .eq('id', existingRecords[0].id);
         } else {
-          await supabase.from('player_class').insert([{ 
-            academy_id: academyId, 
-            player_id: pid, 
-            class_id: classId, 
-            status: 'ACTIVE',
-            start_date: todayStr 
-          }]);
+          // 如果他是第一次来这个班，就全新插入一条记录
+          await supabase
+            .from('player_class')
+            .insert([{ 
+              academy_id: academyId, 
+              player_id: pid, 
+              class_id: classId, 
+              status: 'ACTIVE',
+              start_date: todayStr 
+            }]);
         }
       }
 
+      // 3. UI 状态更新
       setClassPlayers(draftClassPlayers);
       setEnrolledCounts(prev => ({...prev, [classId]: draftClassPlayers.length}));
       setIsManagePlayersOpen(false);
       
-      // ✅ 核心修复 3: 纯英文成功提示
       alert('Players updated successfully!');
 
     } catch (error) {
