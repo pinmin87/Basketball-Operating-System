@@ -17,7 +17,7 @@ export default function DashboardPage() {
   };
 
   return (
-    // ✅ 关键修改：使用 h-[100dvh] 和 overflow-hidden 彻底锁死屏幕，禁止上下滑动产生空白
+    // ✅ 使用 h-[100dvh] 和 overflow-hidden 彻底锁死屏幕，禁止上下滑动产生空白
     <div className="bg-gray-50 h-[100dvh] flex flex-col overflow-hidden overscroll-none">
       
       {/* 顶部欢迎与核心运营数据区 (固定不压缩) */}
@@ -61,14 +61,22 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* ✅ 下方内容区：动态填满剩余空间 (flex-1) 并且优化间距 */}
+      {/* 下方内容区：动态填满剩余空间 (flex-1) 并且优化间距 */}
       <div className="flex-1 p-5 -mt-4 relative z-20 flex flex-col gap-5">
         
-        {/* 财务数据区 */}
+        {/* ✅ 修改：财务数据区，将月份 (AUG 2026) 移到标题正下方，并进行现代风美化 */}
         <div className="shrink-0">
-          <h2 className="text-[13px] font-black text-gray-400 uppercase tracking-widest mb-2.5 ml-2 flex items-center">
-            Fees Overview <span className="bg-gray-200 text-gray-500 px-2 py-0.5 rounded-md ml-2 text-[10px]">{metrics.currentMonth}</span>
-          </h2>
+          <div className="flex flex-col ml-2 mb-2.5">
+            <h2 className="text-[13px] font-black text-gray-400 uppercase tracking-widest">
+              Fees Overview
+            </h2>
+            {/* 高颜值月份徽章 (Badge) */}
+            <div className="mt-1.5 inline-flex items-center bg-white border border-indigo-100 text-indigo-600 px-3 py-1.5 rounded-xl w-max shadow-sm active:scale-95 transition-transform">
+               <CalendarDays size={14} className="mr-1.5 text-indigo-500" />
+               <span className="text-[11px] font-black tracking-widest">{metrics.currentMonth}</span>
+            </div>
+          </div>
+          
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-green-50 p-4 rounded-[1.5rem] shadow-sm border border-green-100 flex flex-col justify-center">
               <span className="text-[10px] text-green-600 font-bold uppercase tracking-widest mb-0.5">Collected</span>
