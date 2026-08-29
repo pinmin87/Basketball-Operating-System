@@ -27,12 +27,11 @@ export default function ClassesPage() {
   const [classForm, setClassForm] = useState<any>(DEFAULT_CLASS);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Manage Players Modal State
   const [isManagePlayersOpen, setIsManagePlayersOpen] = useState(false);
   const [currentManageClass, setCurrentManageClass] = useState<any>(null);
   const [allPlayers, setAllPlayers] = useState<any[]>([]);
-  const [classPlayers, setClassPlayers] = useState<string[]>([]); // 数据库里真实的名单
-  const [draftClassPlayers, setDraftClassPlayers] = useState<string[]>([]); // 教练在弹窗里正在勾选的草稿名单
+  const [classPlayers, setClassPlayers] = useState<string[]>([]); 
+  const [draftClassPlayers, setDraftClassPlayers] = useState<string[]>([]); 
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
   const [isSavingPlayers, setIsSavingPlayers] = useState(false);
 
@@ -56,10 +55,15 @@ export default function ClassesPage() {
         if (error) throw error;
         setClasses(classesData || []);
 
-        const { data: enrollmentData } = await supabase.from('player_class').select('class_id').eq('academy_id', currentAcademyId).eq('status', 'ACTIVE');
+        // ✅ 核心修复 1: 使用 JS 兼容旧数据的 Active 大小写问题
+        const { data: enrollmentData } = await supabase.from('player_class').select('class_id, status').eq('academy_id', currentAcademyId);
         if (enrollmentData) {
           const counts: Record<string, number> = {};
-          enrollmentData.forEach((row: any) => counts[row.class_id] = (counts[row.class_id] || 0) + 1);
+          enrollmentData.forEach((row: any) => {
+            if (row.status && row.status.toUpperCase() === 'ACTIVE') {
+              counts[row.class_id] = (counts[row.class_id] || 0) + 1;
+            }
+          });
           setEnrolledCounts(counts);
         }
       }
@@ -178,17 +182,20 @@ export default function ClassesPage() {
       const { data: playersData } = await supabase.from('players').select('id, name, parent_phone').eq('academy_id', academyId).eq('status', 'ACTIVE').order('name');
       setAllPlayers(playersData || []);
 
-      const { data: enrollmentData } = await supabase.from('player_class').select('player_id').eq('class_id', cls.id).eq('status', 'ACTIVE');
-      const enrolledIds = enrollmentData ? enrollmentData.map(e => e.player_id) : [];
+      // ✅ 核心修复 2: 取消严格匹配，用 JS 过滤，确保旧数据也被抓取并显示为 Remove
+      const { data: enrollmentData } = await supabase.from('player_class').select('player_id, status').eq('class_id', cls.id);
+      
+      const enrolledIds = enrollmentData 
+        ? enrollmentData.filter(e => e.status && e.status.toUpperCase() === 'ACTIVE').map(e => e.player_id) 
+        : [];
       
       setClassPlayers(enrolledIds);
-      setDraftClassPlayers(enrolledIds); // 初始化草稿名单
+      setDraftClassPlayers(enrolledIds);
     } catch (error) {
       console.error('Error fetching players:', error);
     }
   };
 
-  // 🚀 本地瞬间切换状态 (没有任何网络延迟)
   const togglePlayerDraft = (playerId: string, isCurrentlyEnrolled: boolean) => {
     if (isCurrentlyEnrolled) {
       setDraftClassPlayers(prev => prev.filter(id => id !== playerId));
@@ -197,19 +204,16 @@ export default function ClassesPage() {
     }
   };
 
-  // 🚀 核心修复：点击 Save Button 时批量上传并处理数据库逻辑
   const handleSavePlayers = async () => {
     if (!currentManageClass || !academyId) return;
     setIsSavingPlayers(true);
     const classId = currentManageClass.id;
     const todayStr = new Date().toISOString().split('T')[0];
 
-    // 计算差异
     const playersToDeactivate = classPlayers.filter(id => !draftClassPlayers.includes(id));
     const playersToActivate = draftClassPlayers.filter(id => !classPlayers.includes(id));
 
     try {
-      // 1. 移除球员 (设为 INACTIVE)
       for (const pid of playersToDeactivate) {
         const { data: existing } = await supabase.from('player_class').select('id').eq('player_id', pid).eq('class_id', classId).maybeSingle();
         if (existing) {
@@ -217,13 +221,11 @@ export default function ClassesPage() {
         }
       }
 
-      // 2. 增加球员 (设为 ACTIVE)
       for (const pid of playersToActivate) {
         const { data: existing } = await supabase.from('player_class').select('id').eq('player_id', pid).eq('class_id', classId).maybeSingle();
         if (existing) {
           await supabase.from('player_class').update({ status: 'ACTIVE', end_date: null }).eq('id', existing.id);
         } else {
-          // 附带 start_date 防止数据库报错
           await supabase.from('player_class').insert([{ 
             academy_id: academyId, 
             player_id: pid, 
@@ -234,13 +236,12 @@ export default function ClassesPage() {
         }
       }
 
-      // 3. 更新成功后，同步本地状态并关闭弹窗
       setClassPlayers(draftClassPlayers);
       setEnrolledCounts(prev => ({...prev, [classId]: draftClassPlayers.length}));
       setIsManagePlayersOpen(false);
       
-      // 给使用者成功提示
-      alert('Players updated successfully! (保存成功)');
+      // ✅ 核心修复 3: 纯英文成功提示
+      alert('Players updated successfully!');
 
     } catch (error) {
       console.error('Failed to sync player status with database:', error);
@@ -343,7 +344,7 @@ export default function ClassesPage() {
         )}
       </div>
 
-      {/* 🚀 MANAGE PLAYERS MODAL */}
+      {/* MANAGE PLAYERS MODAL */}
       {isManagePlayersOpen && currentManageClass && (
         <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[70] flex items-end justify-center">
           <div className="bg-gray-50 w-full max-w-md rounded-t-[2.5rem] shadow-2xl flex flex-col h-[90vh] animate-in slide-in-from-bottom-5">
@@ -366,7 +367,6 @@ export default function ClassesPage() {
                  <div className="text-center py-10 text-gray-400 font-bold text-sm">No players found.</div>
               ) : (
                 filteredModalPlayers.map(player => {
-                  // 依据草稿状态决定按钮外观
                   const isEnrolled = draftClassPlayers.includes(player.id);
                   return (
                     <div key={player.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
@@ -383,7 +383,6 @@ export default function ClassesPage() {
               )}
             </div>
 
-            {/* 🚀 新增：保存按钮区域 */}
             <div className="p-6 pb-safe border-t border-gray-100 shrink-0 bg-white shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
               <button 
                 onClick={handleSavePlayers} 
@@ -398,7 +397,7 @@ export default function ClassesPage() {
         </div>
       )}
 
-      {/* 隐藏了 CREATE / EDIT CLASS MODAL 以节省文本空间，您原本的代码此处保持不变即可，如果需要我也可以提供 */}
+      {/* CREATE / EDIT CLASS MODAL 保持原样 */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[60] flex items-end justify-center">
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] shadow-2xl flex flex-col h-[90vh] animate-in slide-in-from-bottom-5">
@@ -436,7 +435,6 @@ export default function ClassesPage() {
                 <input type="text" value={classForm.venue} onChange={(e) => setClassForm({...classForm, venue: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 font-bold text-[16px] text-gray-900 outline-none" />
               </div>
 
-              {/* Dynamic Schedules Section */}
               <div className="space-y-4">
                 <h4 className="text-[11px] font-black text-gray-500 uppercase tracking-widest border-b border-gray-200 pb-2">Training Schedules</h4>
                 {classForm.schedules.map((session: any, index: number) => (
