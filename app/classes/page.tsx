@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, Plus, MapPin, Clock, Users, CalendarDays, Edit3, Trash2, Loader2, DollarSign, X, UserPlus, UserMinus } from 'lucide-react';
+import { Search, Plus, MapPin, Clock, Users, CalendarDays, Edit3, Trash2, Loader2, DollarSign, X, UserPlus, UserMinus, Save } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://knnpacipzzyvluchbykb.supabase.co';
@@ -27,11 +27,14 @@ export default function ClassesPage() {
   const [classForm, setClassForm] = useState<any>(DEFAULT_CLASS);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Manage Players Modal State
   const [isManagePlayersOpen, setIsManagePlayersOpen] = useState(false);
   const [currentManageClass, setCurrentManageClass] = useState<any>(null);
   const [allPlayers, setAllPlayers] = useState<any[]>([]);
-  const [classPlayers, setClassPlayers] = useState<string[]>([]);
+  const [classPlayers, setClassPlayers] = useState<string[]>([]); // 数据库里真实的名单
+  const [draftClassPlayers, setDraftClassPlayers] = useState<string[]>([]); // 教练在弹窗里正在勾选的草稿名单
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
+  const [isSavingPlayers, setIsSavingPlayers] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -176,56 +179,74 @@ export default function ClassesPage() {
       setAllPlayers(playersData || []);
 
       const { data: enrollmentData } = await supabase.from('player_class').select('player_id').eq('class_id', cls.id).eq('status', 'ACTIVE');
-      setClassPlayers(enrollmentData ? enrollmentData.map(e => e.player_id) : []);
+      const enrolledIds = enrollmentData ? enrollmentData.map(e => e.player_id) : [];
+      
+      setClassPlayers(enrolledIds);
+      setDraftClassPlayers(enrolledIds); // 初始化草稿名单
     } catch (error) {
       console.error('Error fetching players:', error);
     }
   };
 
-  // 🚀 核心修复：精准更新 Player 状态
-  const togglePlayerInClass = async (playerId: string, isCurrentlyEnrolled: boolean) => {
-    const classId = currentManageClass.id;
-    const newStatus = isCurrentlyEnrolled ? 'INACTIVE' : 'ACTIVE';
-
-    // UI 先行极速更新
+  // 🚀 本地瞬间切换状态 (没有任何网络延迟)
+  const togglePlayerDraft = (playerId: string, isCurrentlyEnrolled: boolean) => {
     if (isCurrentlyEnrolled) {
-      setClassPlayers(prev => prev.filter(id => id !== playerId));
-      setEnrolledCounts(prev => ({...prev, [classId]: Math.max(0, (prev[classId] || 1) - 1)}));
+      setDraftClassPlayers(prev => prev.filter(id => id !== playerId));
     } else {
-      setClassPlayers(prev => [...prev, playerId]);
-      setEnrolledCounts(prev => ({...prev, [classId]: (prev[classId] || 0) + 1}));
+      setDraftClassPlayers(prev => [...prev, playerId]);
     }
+  };
+
+  // 🚀 核心修复：点击 Save Button 时批量上传并处理数据库逻辑
+  const handleSavePlayers = async () => {
+    if (!currentManageClass || !academyId) return;
+    setIsSavingPlayers(true);
+    const classId = currentManageClass.id;
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // 计算差异
+    const playersToDeactivate = classPlayers.filter(id => !draftClassPlayers.includes(id));
+    const playersToActivate = draftClassPlayers.filter(id => !classPlayers.includes(id));
 
     try {
-      // 数据库严格更新：先找到那条唯一记录的 ID，再修改状态
-      const { data: existing, error: fetchError } = await supabase
-        .from('player_class')
-        .select('id')
-        .eq('player_id', playerId)
-        .eq('class_id', classId)
-        .maybeSingle(); // 确保只抓取一条记录
-      
-      if (fetchError) throw fetchError;
-
-      if (existing) {
-        // 如果记录存在，精准 UPDATE 这一条的 status
-        const { error: updateError } = await supabase
-          .from('player_class')
-          .update({ status: newStatus })
-          .eq('id', existing.id);
-          
-        if (updateError) throw updateError;
-      } else {
-        // 如果是全新关联，则 INSERT
-        const { error: insertError } = await supabase
-          .from('player_class')
-          .insert([{ academy_id: academyId, player_id: playerId, class_id: classId, status: newStatus }]);
-          
-        if (insertError) throw insertError;
+      // 1. 移除球员 (设为 INACTIVE)
+      for (const pid of playersToDeactivate) {
+        const { data: existing } = await supabase.from('player_class').select('id').eq('player_id', pid).eq('class_id', classId).maybeSingle();
+        if (existing) {
+          await supabase.from('player_class').update({ status: 'INACTIVE', end_date: todayStr }).eq('id', existing.id);
+        }
       }
+
+      // 2. 增加球员 (设为 ACTIVE)
+      for (const pid of playersToActivate) {
+        const { data: existing } = await supabase.from('player_class').select('id').eq('player_id', pid).eq('class_id', classId).maybeSingle();
+        if (existing) {
+          await supabase.from('player_class').update({ status: 'ACTIVE', end_date: null }).eq('id', existing.id);
+        } else {
+          // 附带 start_date 防止数据库报错
+          await supabase.from('player_class').insert([{ 
+            academy_id: academyId, 
+            player_id: pid, 
+            class_id: classId, 
+            status: 'ACTIVE',
+            start_date: todayStr 
+          }]);
+        }
+      }
+
+      // 3. 更新成功后，同步本地状态并关闭弹窗
+      setClassPlayers(draftClassPlayers);
+      setEnrolledCounts(prev => ({...prev, [classId]: draftClassPlayers.length}));
+      setIsManagePlayersOpen(false);
+      
+      // 给使用者成功提示
+      alert('Players updated successfully! (保存成功)');
+
     } catch (error) {
       console.error('Failed to sync player status with database:', error);
       alert('Network error. Failed to save changes.');
+    } finally {
+      setIsSavingPlayers(false);
     }
   };
 
@@ -308,7 +329,6 @@ export default function ClassesPage() {
                   <div className="pt-4 border-t border-gray-100 flex justify-between items-center">
                     <button onClick={() => openManagePlayersModal(cls)} className="flex items-center space-x-2 bg-blue-50 hover:bg-blue-100 active:bg-blue-200 px-3 py-2 rounded-xl transition-colors">
                       <Users size={16} className={isFull ? "text-red-500" : "text-blue-500"} />
-                      {/* ✅ 文案修改：从 Students 统一改为 Players */}
                       <span className={`text-xs font-black ${isFull ? "text-red-600" : "text-blue-700"}`}>{enrolledCount} / {cls.capacity || 20} Players</span>
                     </button>
                     <div className="bg-green-50 px-3 py-1.5 rounded-xl border border-green-100/50">
@@ -323,13 +343,13 @@ export default function ClassesPage() {
         )}
       </div>
 
+      {/* 🚀 MANAGE PLAYERS MODAL */}
       {isManagePlayersOpen && currentManageClass && (
         <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[70] flex items-end justify-center">
           <div className="bg-gray-50 w-full max-w-md rounded-t-[2.5rem] shadow-2xl flex flex-col h-[90vh] animate-in slide-in-from-bottom-5">
             <div className="p-6 border-b border-gray-200 shrink-0 bg-white rounded-t-[2.5rem]">
               <div className="flex justify-between items-center mb-4">
                 <div>
-                  {/* ✅ 文案修改：改为 Manage Players */}
                   <h3 className="font-black text-2xl text-gray-900">Manage Players</h3>
                   <p className="text-sm font-bold text-blue-600 mt-1">{currentManageClass.name}</p>
                 </div>
@@ -346,14 +366,15 @@ export default function ClassesPage() {
                  <div className="text-center py-10 text-gray-400 font-bold text-sm">No players found.</div>
               ) : (
                 filteredModalPlayers.map(player => {
-                  const isEnrolled = classPlayers.includes(player.id);
+                  // 依据草稿状态决定按钮外观
+                  const isEnrolled = draftClassPlayers.includes(player.id);
                   return (
                     <div key={player.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
                       <div>
                         <p className="font-black text-gray-900 text-[16px]">{player.name}</p>
                         <p className="text-xs font-bold text-gray-400 mt-0.5">{player.parent_phone || 'No Phone'}</p>
                       </div>
-                      <button onClick={() => togglePlayerInClass(player.id, isEnrolled)} className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-xl font-black text-sm transition-all active:scale-95 ${isEnrolled ? 'bg-red-50 text-red-600 border border-red-100 hover:bg-red-100' : 'bg-blue-600 text-white shadow-md hover:bg-blue-700'}`}>
+                      <button onClick={() => togglePlayerDraft(player.id, isEnrolled)} className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-xl font-black text-sm transition-all active:scale-95 ${isEnrolled ? 'bg-red-50 text-red-600 border border-red-100 hover:bg-red-100' : 'bg-blue-600 text-white shadow-md hover:bg-blue-700'}`}>
                         {isEnrolled ? <><UserMinus size={16} /><span>Remove</span></> : <><UserPlus size={16} /><span>Add</span></>}
                       </button>
                     </div>
@@ -361,10 +382,23 @@ export default function ClassesPage() {
                 })
               )}
             </div>
+
+            {/* 🚀 新增：保存按钮区域 */}
+            <div className="p-6 pb-safe border-t border-gray-100 shrink-0 bg-white shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
+              <button 
+                onClick={handleSavePlayers} 
+                disabled={isSavingPlayers} 
+                className="w-full bg-blue-600 text-white font-black text-lg py-4 rounded-2xl flex items-center justify-center space-x-2 active:bg-blue-700 shadow-md disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors"
+              >
+                {isSavingPlayers ? <Loader2 size={24} className="animate-spin" /> : <Save size={20} />}
+                <span>{isSavingPlayers ? 'Saving...' : 'Save Changes'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
 
+      {/* 隐藏了 CREATE / EDIT CLASS MODAL 以节省文本空间，您原本的代码此处保持不变即可，如果需要我也可以提供 */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[60] flex items-end justify-center">
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] shadow-2xl flex flex-col h-[90vh] animate-in slide-in-from-bottom-5">
