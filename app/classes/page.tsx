@@ -59,7 +59,8 @@ export default function ClassesPage() {
         if (enrollmentData) {
           const counts: Record<string, number> = {};
           enrollmentData.forEach((row: any) => {
-            if (row.status && row.status.toUpperCase() === 'ACTIVE') {
+            // 🚀 防御性编程：强制去除空格并大写，防止脏数据
+            if (row.status && String(row.status).trim().toUpperCase() === 'ACTIVE') {
               counts[row.class_id] = (counts[row.class_id] || 0) + 1;
             }
           });
@@ -183,8 +184,9 @@ export default function ClassesPage() {
 
       const { data: enrollmentData } = await supabase.from('player_class').select('player_id, status').eq('class_id', cls.id);
       
+      // 🚀 核心修复：强制转为 String，根除 Number 与 String 比较失败的 Bug
       const enrolledIds = enrollmentData 
-        ? enrollmentData.filter(e => e.status && e.status.toUpperCase() === 'ACTIVE').map(e => e.player_id) 
+        ? enrollmentData.filter(e => e.status && String(e.status).trim().toUpperCase() === 'ACTIVE').map(e => String(e.player_id)) 
         : [];
       
       setClassPlayers(enrolledIds);
@@ -194,15 +196,16 @@ export default function ClassesPage() {
     }
   };
 
-  const togglePlayerDraft = (playerId: string, isCurrentlyEnrolled: boolean) => {
+  // 🚀 核心修复：点击状态切换，强制转换为 String 确保安全
+  const togglePlayerDraft = (playerId: any, isCurrentlyEnrolled: boolean) => {
+    const strId = String(playerId);
     if (isCurrentlyEnrolled) {
-      setDraftClassPlayers(prev => prev.filter(id => id !== playerId));
+      setDraftClassPlayers(prev => prev.filter(id => id !== strId));
     } else {
-      setDraftClassPlayers(prev => [...prev, playerId]);
+      setDraftClassPlayers(prev => [...prev, strId]);
     }
   };
 
-  // 🚀 核心 Bug 修复：防崩溃的暴力保存逻辑
   const handleSavePlayers = async () => {
     if (!currentManageClass || !academyId) return;
     setIsSavingPlayers(true);
@@ -213,7 +216,6 @@ export default function ClassesPage() {
     const playersToActivate = draftClassPlayers.filter(id => !classPlayers.includes(id));
 
     try {
-      // 1. 移除球员 (Deactivate)：摒弃 maybeSingle，直接暴力批量更新所有匹配的行
       for (const pid of playersToDeactivate) {
         const { error: updateError } = await supabase
           .from('player_class')
@@ -224,23 +226,20 @@ export default function ClassesPage() {
         if (updateError) throw updateError;
       }
 
-      // 2. 增加球员 (Activate)：先尝试查他是不是以前来过（限制只拿1条，避免崩溃）
       for (const pid of playersToActivate) {
         const { data: existingRecords } = await supabase
           .from('player_class')
           .select('id')
           .eq('player_id', pid)
           .eq('class_id', classId)
-          .limit(1); // 🚀 关键修复：用 limit(1) 替代会崩溃的 maybeSingle()
+          .limit(1);
 
         if (existingRecords && existingRecords.length > 0) {
-          // 如果他以前来过这个班，就把历史记录重新激活
           await supabase
             .from('player_class')
             .update({ status: 'ACTIVE', end_date: null })
             .eq('id', existingRecords[0].id);
         } else {
-          // 如果他是第一次来这个班，就全新插入一条记录
           await supabase
             .from('player_class')
             .insert([{ 
@@ -253,7 +252,6 @@ export default function ClassesPage() {
         }
       }
 
-      // 3. UI 状态更新
       setClassPlayers(draftClassPlayers);
       setEnrolledCounts(prev => ({...prev, [classId]: draftClassPlayers.length}));
       setIsManagePlayersOpen(false);
@@ -299,6 +297,10 @@ export default function ClassesPage() {
   if (!isMounted) return <div className="h-full flex items-center justify-center"><p className="text-gray-400 font-bold">Loading...</p></div>;
 
   const filteredModalPlayers = allPlayers.filter(p => p.name.toLowerCase().includes(playerSearchQuery.toLowerCase()) || (p.parent_phone && p.parent_phone.includes(playerSearchQuery)));
+
+  // 🚀 核心 UX 优化：将筛选后的球员分为“已加入”和“待加入”两组
+  const enrolledModalPlayers = filteredModalPlayers.filter(p => draftClassPlayers.includes(String(p.id)));
+  const availableModalPlayers = filteredModalPlayers.filter(p => !draftClassPlayers.includes(String(p.id)));
 
   return (
     <div className="bg-gray-50 min-h-full pb-10">
@@ -379,24 +381,47 @@ export default function ClassesPage() {
               </div>
             </div>
             
-            <div className="p-4 overflow-y-auto flex-1 space-y-3">
+            <div className="p-4 overflow-y-auto flex-1 space-y-6">
               {filteredModalPlayers.length === 0 ? (
                  <div className="text-center py-10 text-gray-400 font-bold text-sm">No players found.</div>
               ) : (
-                filteredModalPlayers.map(player => {
-                  const isEnrolled = draftClassPlayers.includes(player.id);
-                  return (
-                    <div key={player.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
-                      <div>
-                        <p className="font-black text-gray-900 text-[16px]">{player.name}</p>
-                        <p className="text-xs font-bold text-gray-400 mt-0.5">{player.parent_phone || 'No Phone'}</p>
-                      </div>
-                      <button onClick={() => togglePlayerDraft(player.id, isEnrolled)} className={`flex items-center space-x-1.5 px-4 py-2.5 rounded-xl font-black text-sm transition-all active:scale-95 ${isEnrolled ? 'bg-red-50 text-red-600 border border-red-100 hover:bg-red-100' : 'bg-blue-600 text-white shadow-md hover:bg-blue-700'}`}>
-                        {isEnrolled ? <><UserMinus size={16} /><span>Remove</span></> : <><UserPlus size={16} /><span>Add</span></>}
-                      </button>
+                <>
+                  {/* 区块 1：已经加入的球员 (在上方) */}
+                  {enrolledModalPlayers.length > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Added Players ({enrolledModalPlayers.length})</h4>
+                      {enrolledModalPlayers.map(player => (
+                        <div key={player.id} className="bg-blue-50/50 p-4 rounded-2xl shadow-sm border border-blue-100 flex justify-between items-center animate-in fade-in zoom-in-95 duration-200">
+                          <div>
+                            <p className="font-black text-gray-900 text-[16px]">{player.name}</p>
+                            <p className="text-xs font-bold text-gray-500 mt-0.5">{player.parent_phone || 'No Phone'}</p>
+                          </div>
+                          <button onClick={() => togglePlayerDraft(player.id, true)} className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl font-black text-sm transition-all active:scale-95 bg-white text-red-500 border border-red-100 hover:bg-red-50 shadow-sm">
+                            <UserMinus size={16} /><span>Remove</span>
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  );
-                })
+                  )}
+
+                  {/* 区块 2：等待加入的球员 (在下方) */}
+                  {availableModalPlayers.length > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Available Players ({availableModalPlayers.length})</h4>
+                      {availableModalPlayers.map(player => (
+                        <div key={player.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center animate-in fade-in zoom-in-95 duration-200">
+                          <div>
+                            <p className="font-black text-gray-900 text-[16px]">{player.name}</p>
+                            <p className="text-xs font-bold text-gray-400 mt-0.5">{player.parent_phone || 'No Phone'}</p>
+                          </div>
+                          <button onClick={() => togglePlayerDraft(player.id, false)} className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl font-black text-sm transition-all active:scale-95 bg-blue-600 text-white shadow-md hover:bg-blue-700">
+                            <UserPlus size={16} /><span>Add</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
