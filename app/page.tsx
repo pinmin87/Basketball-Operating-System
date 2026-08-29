@@ -46,7 +46,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ✅ 新增：将 Total Players 和 Active Classes 融合在头部下方 */}
+        {/* Total Players 和 Active Classes */}
         <div className="relative z-10 grid grid-cols-2 gap-4 bg-white/10 p-4 rounded-2xl backdrop-blur-sm border border-white/10">
           <div>
             <p className="text-blue-200 text-[11px] font-bold uppercase tracking-widest mb-0.5">Total Players</p>
@@ -61,7 +61,7 @@ export default function DashboardPage() {
 
       <div className="p-5 -mt-4 relative z-20 space-y-8">
         
-        {/* ✅ 修改：财务数据区，统一月份显示在顶部 */}
+        {/* 财务数据区，统一月份显示在顶部 */}
         <div>
           <h2 className="text-[13px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-2 flex items-center">
             Fees Overview <span className="bg-gray-200 text-gray-500 px-2 py-0.5 rounded-md ml-2 text-[10px]">{metrics.currentMonth}</span>
@@ -78,7 +78,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 核心快捷入口 (Quick Actions) - 完全保持原状 */}
+        {/* 核心快捷入口 (Quick Actions) */}
         <div>
           <h2 className="text-[13px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-2">Quick Actions</h2>
           <div className="grid grid-cols-2 gap-4">
@@ -116,11 +116,6 @@ export default function DashboardPage() {
             </Link>
 
           </div>
-        </div>
-
-        {/* 底部版本提示 */}
-        <div className="bg-gray-200/50 rounded-2xl p-4 text-center">
-          <p className="text-xs font-bold text-gray-500">Move Academy OS v1.0 MVP</p>
         </div>
 
       </div>
