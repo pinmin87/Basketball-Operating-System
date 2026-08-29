@@ -27,7 +27,6 @@ export default function ClassesPage() {
   const [classForm, setClassForm] = useState<any>(DEFAULT_CLASS);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Manage Players Modal States
   const [isManagePlayersOpen, setIsManagePlayersOpen] = useState(false);
   const [currentManageClass, setCurrentManageClass] = useState<any>(null);
   const [allPlayers, setAllPlayers] = useState<any[]>([]);
@@ -35,7 +34,6 @@ export default function ClassesPage() {
   const [draftClassPlayers, setDraftClassPlayers] = useState<string[]>([]); 
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
   const [isSavingPlayers, setIsSavingPlayers] = useState(false);
-  // 🚀 新增：用于弹窗内部的数据加载状态
   const [isFetchingModalData, setIsFetchingModalData] = useState(false); 
 
   useEffect(() => {
@@ -174,13 +172,12 @@ export default function ClassesPage() {
     setIsModalOpen(true);
   };
 
-  // 🚀 核心修复：重构打开弹窗的逻辑，确保数据读取完毕后再渲染
   const openManagePlayersModal = async (cls: any) => {
     setCurrentManageClass(cls);
     setIsManagePlayersOpen(true);
     setPlayerSearchQuery('');
-    setIsFetchingModalData(true); // 开启 Loading
-    setDraftClassPlayers([]); // 强制清空旧草稿
+    setIsFetchingModalData(true); 
+    setDraftClassPlayers([]); 
     setClassPlayers([]); 
 
     if (!academyId) {
@@ -203,7 +200,7 @@ export default function ClassesPage() {
     } catch (error) {
       console.error('Error fetching players:', error);
     } finally {
-      setIsFetchingModalData(false); // 关闭 Loading，正式渲染真实数据
+      setIsFetchingModalData(false); 
     }
   };
 
@@ -216,62 +213,79 @@ export default function ClassesPage() {
     }
   };
 
+  // 🚀 终极防弹保存逻辑：去掉任何可能导致数据库报错的无用字段，强制抛出错误日志
   const handleSavePlayers = async () => {
     if (!currentManageClass || !academyId) return;
     setIsSavingPlayers(true);
     const classId = currentManageClass.id;
-    const todayStr = new Date().toISOString().split('T')[0];
 
-    const playersToDeactivate = classPlayers.filter(id => !draftClassPlayers.includes(id));
-    const playersToActivate = draftClassPlayers.filter(id => !classPlayers.includes(id));
+    // 强制转换为 String 进行对比，彻底消灭数据类型带来的幽灵 Bug
+    const currentClassPlayerIds = classPlayers.map(String);
+    const newDraftIds = draftClassPlayers.map(String);
+
+    const playersToDeactivate = currentClassPlayerIds.filter(id => !newDraftIds.includes(id));
+    const playersToActivate = newDraftIds.filter(id => !currentClassPlayerIds.includes(id));
 
     try {
+      // 1. 处理移除 (改为 INACTIVE)
       for (const pid of playersToDeactivate) {
-        const { error: updateError } = await supabase
+        const { error } = await supabase
           .from('player_class')
-          .update({ status: 'INACTIVE', end_date: todayStr })
+          .update({ status: 'INACTIVE' })
           .eq('player_id', pid)
           .eq('class_id', classId);
-          
-        if (updateError) throw updateError;
+        
+        if (error) throw new Error(`Failed to remove player ${pid}: ${error.message}`);
       }
 
+      // 2. 处理添加 (改为 ACTIVE)
       for (const pid of playersToActivate) {
-        const { data: existingRecords } = await supabase
+        // 先检查是否存在历史记录
+        const { data: existingRecords, error: checkErr } = await supabase
           .from('player_class')
           .select('id')
           .eq('player_id', pid)
           .eq('class_id', classId)
           .limit(1);
 
+        if (checkErr) throw new Error(`Failed to check existing record for ${pid}: ${checkErr.message}`);
+
         if (existingRecords && existingRecords.length > 0) {
-          await supabase
+          // 重新激活历史记录
+          const { error: updErr } = await supabase
             .from('player_class')
-            .update({ status: 'ACTIVE', end_date: null })
+            .update({ status: 'ACTIVE' })
             .eq('id', existingRecords[0].id);
+          
+          if (updErr) throw new Error(`Failed to reactivate player ${pid}: ${updErr.message}`);
         } else {
-          await supabase
+          // 🚀 核心修复：纯粹的新增，去掉了 start_date 等引发报错的累赘字段
+          const { error: insErr } = await supabase
             .from('player_class')
             .insert([{ 
               academy_id: academyId, 
               player_id: pid, 
               class_id: classId, 
-              status: 'ACTIVE',
-              start_date: todayStr 
+              status: 'ACTIVE'
             }]);
+          
+          if (insErr) throw new Error(`Failed to insert new player ${pid}: ${insErr.message}`);
         }
       }
 
-      setClassPlayers(draftClassPlayers);
-      setEnrolledCounts(prev => ({...prev, [classId]: draftClassPlayers.length}));
+      // 3. 所有数据库操作成功后，才更新本地状态
+      setClassPlayers(newDraftIds);
       setIsManagePlayersOpen(false);
       
-      // 保存完顺便刷新外层卡片的统计数据
-      fetchClasses();
+      // 🚀 核心修复：保存完立刻拉取最新数据，让外面的卡片数字瞬间更新！
+      await fetchClasses();
 
-    } catch (error) {
-      console.error('Failed to sync player status with database:', error);
-      alert('Network error. Failed to save changes.');
+      alert('Players updated successfully!');
+
+    } catch (error: any) {
+      console.error('Database Sync Error:', error);
+      // 🚀 把真实的报错原因弹出来给您看，不再静默失败！
+      alert(`Error saving changes: ${error.message || 'Check database schema'}`);
     } finally {
       setIsSavingPlayers(false);
     }
@@ -392,7 +406,6 @@ export default function ClassesPage() {
             </div>
             
             <div className="p-4 overflow-y-auto flex-1 space-y-6">
-              {/* 🚀 核心修复：如果是抓取中，显示 Loading */}
               {isFetchingModalData ? (
                 <div className="flex flex-col items-center justify-center py-20 opacity-50">
                   <Loader2 size={32} className="animate-spin text-blue-500 mb-4" />
@@ -453,7 +466,7 @@ export default function ClassesPage() {
         </div>
       )}
 
-      {/* CREATE / EDIT CLASS MODAL 保持原样 */}
+      {/* CREATE / EDIT CLASS MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[60] flex items-end justify-center">
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] shadow-2xl flex flex-col h-[90vh] animate-in slide-in-from-bottom-5">
