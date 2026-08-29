@@ -147,17 +147,23 @@ export default function ClassesPage() {
     setEditingId(cls.id);
     let loadedSchedules = cls.schedules;
     if (!loadedSchedules || loadedSchedules.length === 0) {
-      loadedSchedules = [{
-        dayOfWeek: cls.day_of_week || 'Saturday',
-        startTime: cls.start_time?.substring(0, 5) || '08:00',
-        endTime: cls.end_time?.substring(0, 5) || '10:00'
-      }];
+      loadedSchedules = [];
+      if (cls.day_of_week) {
+        loadedSchedules.push({
+          dayOfWeek: cls.day_of_week,
+          startTime: cls.start_time?.substring(0, 5) || '08:00',
+          endTime: cls.end_time?.substring(0, 5) || '10:00'
+        });
+      }
       if (cls.day_of_week_2) {
         loadedSchedules.push({
           dayOfWeek: cls.day_of_week_2,
           startTime: cls.start_time_2?.substring(0, 5) || '08:00',
           endTime: cls.end_time_2?.substring(0, 5) || '10:00'
         });
+      }
+      if (loadedSchedules.length === 0) {
+        loadedSchedules = [{ dayOfWeek: 'Saturday', startTime: '08:00', endTime: '10:00' }];
       }
     }
 
@@ -213,13 +219,12 @@ export default function ClassesPage() {
     }
   };
 
-  // 🚀 终极防弹保存逻辑：去掉任何可能导致数据库报错的无用字段，强制抛出错误日志
   const handleSavePlayers = async () => {
     if (!currentManageClass || !academyId) return;
     setIsSavingPlayers(true);
     const classId = currentManageClass.id;
+    const todayStr = new Date().toISOString().split('T')[0];
 
-    // 强制转换为 String 进行对比，彻底消灭数据类型带来的幽灵 Bug
     const currentClassPlayerIds = classPlayers.map(String);
     const newDraftIds = draftClassPlayers.map(String);
 
@@ -227,20 +232,17 @@ export default function ClassesPage() {
     const playersToActivate = newDraftIds.filter(id => !currentClassPlayerIds.includes(id));
 
     try {
-      // 1. 处理移除 (改为 INACTIVE)
       for (const pid of playersToDeactivate) {
         const { error } = await supabase
           .from('player_class')
-          .update({ status: 'INACTIVE' })
+          .update({ status: 'INACTIVE', end_date: todayStr })
           .eq('player_id', pid)
           .eq('class_id', classId);
         
-        if (error) throw new Error(`Failed to remove player ${pid}: ${error.message}`);
+        if (error) throw new Error(`Failed to remove player: ${error.message}`);
       }
 
-      // 2. 处理添加 (改为 ACTIVE)
       for (const pid of playersToActivate) {
-        // 先检查是否存在历史记录
         const { data: existingRecords, error: checkErr } = await supabase
           .from('player_class')
           .select('id')
@@ -248,43 +250,38 @@ export default function ClassesPage() {
           .eq('class_id', classId)
           .limit(1);
 
-        if (checkErr) throw new Error(`Failed to check existing record for ${pid}: ${checkErr.message}`);
+        if (checkErr) throw new Error(`Fetch check error: ${checkErr.message}`);
 
         if (existingRecords && existingRecords.length > 0) {
-          // 重新激活历史记录
           const { error: updErr } = await supabase
             .from('player_class')
-            .update({ status: 'ACTIVE' })
+            .update({ status: 'ACTIVE', end_date: null })
             .eq('id', existingRecords[0].id);
           
-          if (updErr) throw new Error(`Failed to reactivate player ${pid}: ${updErr.message}`);
+          if (updErr) throw new Error(`Update error: ${updErr.message}`);
         } else {
-          // 🚀 核心修复：纯粹的新增，去掉了 start_date 等引发报错的累赘字段
           const { error: insErr } = await supabase
             .from('player_class')
             .insert([{ 
               academy_id: academyId, 
               player_id: pid, 
               class_id: classId, 
-              status: 'ACTIVE'
+              status: 'ACTIVE',
+              start_date: todayStr 
             }]);
           
-          if (insErr) throw new Error(`Failed to insert new player ${pid}: ${insErr.message}`);
+          if (insErr) throw new Error(`Insert error: ${insErr.message}`);
         }
       }
 
-      // 3. 所有数据库操作成功后，才更新本地状态
       setClassPlayers(newDraftIds);
       setIsManagePlayersOpen(false);
       
-      // 🚀 核心修复：保存完立刻拉取最新数据，让外面的卡片数字瞬间更新！
       await fetchClasses();
-
       alert('Players updated successfully!');
 
     } catch (error: any) {
       console.error('Database Sync Error:', error);
-      // 🚀 把真实的报错原因弹出来给您看，不再静默失败！
       alert(`Error saving changes: ${error.message || 'Check database schema'}`);
     } finally {
       setIsSavingPlayers(false);
@@ -299,10 +296,22 @@ export default function ClassesPage() {
     return `${hour % 12 || 12}:${minute} ${ampm}`;
   };
 
+  // 🚀 核心修复：重构时段渲染逻辑，确保旧版数据的 day_of_week 和 day_of_week_2 都能显示
   const renderSchedulesForCard = (cls: any) => {
-    const schedulesToRender = (cls.schedules && cls.schedules.length > 0) 
-      ? cls.schedules 
-      : [{ dayOfWeek: cls.day_of_week, startTime: cls.start_time, endTime: cls.end_time }];
+    let schedulesToRender: any[] = [];
+    
+    if (cls.schedules && cls.schedules.length > 0) {
+      schedulesToRender = cls.schedules;
+    } else {
+      if (cls.day_of_week) {
+        schedulesToRender.push({ dayOfWeek: cls.day_of_week, startTime: cls.start_time, endTime: cls.end_time });
+      }
+      if (cls.day_of_week_2) {
+        schedulesToRender.push({ dayOfWeek: cls.day_of_week_2, startTime: cls.start_time_2, endTime: cls.end_time_2 });
+      }
+    }
+
+    if (schedulesToRender.length === 0) return <div className="text-xs text-gray-400 font-bold">No schedule</div>;
       
     return schedulesToRender.map((s: any, idx: number) => {
       if (!s.dayOfWeek) return null;
