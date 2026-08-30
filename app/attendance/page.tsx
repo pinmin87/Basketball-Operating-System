@@ -1,12 +1,20 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Clock, CalendarDays, Users, CheckSquare, X, Download, CalendarRange, History } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Clock, CalendarDays, Users, CheckSquare, X, Download, CalendarRange, History, Loader2 } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+
+// Supabase 初始化
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://knnpacipzzyvluchbykb.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtubnBhY2lwenp5dmx1Y2hieWtiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczODM2NjYsImV4cCI6MjEwMjk1OTY2Nn0.NnP85JAAv5KP-8_iWpEkgG_D9dwlbB68-mh-x6clNFA';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'LATE' | null;
 
 export default function AttendancePage() {
   const [isMounted, setIsMounted] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [academyId, setAcademyId] = useState<string | null>(null);
   
   const [classes, setClasses] = useState<any[]>([]);
   const [attendances, setAttendances] = useState<any[]>([]);
@@ -19,34 +27,92 @@ export default function AttendancePage() {
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
 
-  // 核心新增：用于记录被点击的球员并显示其历史流水
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [selectedPlayerForHistory, setSelectedPlayerForHistory] = useState<any>(null);
-
-  useEffect(() => {
-    setIsMounted(true);
-    const savedClasses = localStorage.getItem('academy_classes');
-    if (savedClasses) try { setClasses(JSON.parse(savedClasses)); } catch (e) {}
-    const savedAttendances = localStorage.getItem('academy_attendance');
-    if (savedAttendances) try { setAttendances(JSON.parse(savedAttendances)); } catch (e) {}
-    const savedPlayers = localStorage.getItem('academy_players');
-    if (savedPlayers) try { setPlayers(JSON.parse(savedPlayers)); } catch (e) {}
-  }, []);
-
-  useEffect(() => {
-    if (isMounted) localStorage.setItem('academy_attendance', JSON.stringify(attendances));
-  }, [attendances, isMounted]);
 
   const [selectedClass, setSelectedClass] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentRoster, setCurrentRoster] = useState<{ playerId: string, name: string, status: AttendanceStatus }[]>([]);
+  const [isSavingAttendance, setIsSavingAttendance] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+    fetchAcademyData();
+  }, []);
+
+  // 🚀 核心更新：从 Supabase 拉取真实的 Classes, Players 和 Attendance 记录
+  const fetchAcademyData = async () => {
+    try {
+      setIsLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data: profile } = await supabase.from('profiles').select('academy_id').eq('id', session.user.id).single();
+      const currentAcademyId = profile?.academy_id;
+
+      if (currentAcademyId) {
+        setAcademyId(currentAcademyId);
+
+        // 1. 获取班级
+        const { data: classesData } = await supabase.from('classes').select('*').eq('academy_id', currentAcademyId);
+        
+        // 2. 获取所有活跃球员
+        const { data: playersData } = await supabase.from('players').select('*').eq('academy_id', currentAcademyId).eq('status', 'ACTIVE');
+        setPlayers(playersData || []);
+
+        // 3. 获取球员和班级的关联记录 (这是我们刚才修复的模块！)
+        const { data: enrollmentData } = await supabase.from('player_class').select('*').eq('status', 'ACTIVE');
+        
+        // 将关联好的球员塞进对应的班级里
+        const classesWithPlayers = (classesData || []).map(cls => {
+          const enrolledPlayerIds = enrollmentData?.filter(e => e.class_id === cls.id).map(e => e.player_id) || [];
+          const enrolledPlayers = playersData?.filter(p => enrolledPlayerIds.includes(p.id)) || [];
+          return { ...cls, enrolledPlayers };
+        });
+        setClasses(classesWithPlayers);
+
+        // 4. 获取考勤历史
+        const { data: attendanceData } = await supabase.from('attendance').select('*').eq('academy_id', currentAcademyId);
+        
+        // 将数据库扁平的 attendance 记录格式化为页面需要的结构
+        const formattedAttendances: any[] = [];
+        if (attendanceData) {
+          // 按 classId 和 date 分组
+          const grouped = attendanceData.reduce((acc: any, curr) => {
+            const key = `${curr.class_id}_${curr.date}`;
+            if (!acc[key]) acc[key] = { id: key, classId: curr.class_id, date: curr.date, records: [] };
+            acc[key].records.push({ playerId: curr.player_id, status: curr.status });
+            return acc;
+          }, {});
+          Object.values(grouped).forEach(g => formattedAttendances.push(g));
+        }
+        setAttendances(formattedAttendances);
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const dateString = currentDate.toISOString().split('T')[0];
   const dayOfWeek = currentDate.toLocaleDateString('en-US', { weekday: 'long' });
   const isToday = new Date().toISOString().split('T')[0] === dateString;
 
-  const changeDate = (days: number) => { const newDate = new Date(currentDate); newDate.setDate(newDate.getDate() + days); setCurrentDate(newDate); };
-  const classesToday = classes.filter(cls => cls.schedules?.some((sch: any) => sch.day === dayOfWeek));
+  const changeDate = (days: number) => { 
+    const newDate = new Date(currentDate); 
+    newDate.setDate(newDate.getDate() + days); 
+    setCurrentDate(newDate); 
+  };
+
+  // 检查该班级是否在今天有时段 (兼容新旧数据结构)
+  const classesToday = classes.filter(cls => {
+    if (cls.schedules && cls.schedules.length > 0) {
+      return cls.schedules.some((sch: any) => sch.dayOfWeek === dayOfWeek);
+    }
+    return cls.day_of_week === dayOfWeek || cls.day_of_week_2 === dayOfWeek;
+  });
+
   const getAttendanceRecord = (classId: string, date: string) => attendances.find(a => a.classId === classId && a.date === date);
 
   const openAttendanceModal = (cls: any) => {
@@ -66,17 +132,57 @@ export default function AttendancePage() {
   const handleMarkAllPresent = () => setCurrentRoster(currentRoster.map(r => ({ ...r, status: 'PRESENT' })));
   const updatePlayerStatus = (playerId: string, status: AttendanceStatus) => setCurrentRoster(currentRoster.map(r => r.playerId === playerId ? { ...r, status } : r));
 
-  const handleSaveAttendance = () => {
+  // 🚀 核心更新：将点名结果真实存入 Supabase 数据库
+  const handleSaveAttendance = async () => {
     const unMarked = currentRoster.filter(r => r.status === null);
     if (unMarked.length > 0 && !confirm(`${unMarked.length} students haven't been marked. Do you still want to save?`)) return;
-    const newRecord = { id: `${selectedClass.id}_${dateString}`, classId: selectedClass.id, date: dateString, records: currentRoster.map(r => ({ playerId: r.playerId, status: r.status })) };
-    setAttendances([...attendances.filter(a => a.id !== newRecord.id), newRecord]);
-    setIsModalOpen(false);
+    
+    if (!academyId || !selectedClass) return;
+    setIsSavingAttendance(true);
+
+    try {
+      // 1. 先删除这个班级这一天的旧记录（避免重复记录冲突）
+      await supabase.from('attendance')
+        .delete()
+        .eq('class_id', selectedClass.id)
+        .eq('date', dateString);
+
+      // 2. 准备需要插入的新数据 (忽略没点名的 null)
+      const payload = currentRoster
+        .filter(r => r.status !== null)
+        .map(r => ({
+          academy_id: academyId,
+          class_id: selectedClass.id,
+          player_id: r.playerId,
+          date: dateString,
+          status: r.status
+        }));
+
+      // 3. 批量插入新记录
+      if (payload.length > 0) {
+        const { error } = await supabase.from('attendance').insert(payload);
+        if (error) throw error;
+      }
+
+      // 4. 更新前端状态，保证顺滑体验
+      const newRecord = { 
+        id: `${selectedClass.id}_${dateString}`, 
+        classId: selectedClass.id, 
+        date: dateString, 
+        records: currentRoster.filter(r => r.status !== null).map(r => ({ playerId: r.playerId, status: r.status })) 
+      };
+      setAttendances([...attendances.filter(a => a.id !== newRecord.id), newRecord]);
+      setIsModalOpen(false);
+      alert('Attendance saved successfully!');
+
+    } catch (error: any) {
+      console.error('Error saving attendance:', error);
+      alert(`Failed to save attendance: ${error.message}`);
+    } finally {
+      setIsSavingAttendance(false);
+    }
   };
 
-  // ============================================================
-  // 全院动态考勤数据算法 (带 Custom 过滤器)
-  // ============================================================
   const now = new Date();
   const todayStr = now.toISOString().split('T')[0];
   const currentMonthPrefix = todayStr.substring(0, 7);
@@ -123,15 +229,11 @@ export default function AttendancePage() {
     return 'All Time Record';
   };
 
-  // ------------------------------------------------------------
-  // 核心新增：打开历史流水弹窗并生成对应数据
-  // ------------------------------------------------------------
   const openPlayerHistory = (playerStat: any) => {
     setSelectedPlayerForHistory(playerStat);
     setIsHistoryModalOpen(true);
   };
 
-  // 生成当前被选中球员的、经过时间过滤器筛选的历史记录
   let playerHistoryRecords: any[] = [];
   if (selectedPlayerForHistory) {
     filteredAttendances.forEach(att => {
@@ -145,7 +247,6 @@ export default function AttendancePage() {
         });
       }
     });
-    // 排序：最新的日期排在最上面
     playerHistoryRecords.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }
 
@@ -154,6 +255,16 @@ export default function AttendancePage() {
     if (status === 'ABSENT') return 'bg-red-100 text-red-700 border-red-200';
     if (status === 'LATE') return 'bg-orange-100 text-orange-700 border-orange-200';
     return 'bg-gray-100 text-gray-700 border-gray-200';
+  };
+
+  const getScheduleTime = (cls: any, day: string) => {
+    if (cls.schedules && cls.schedules.length > 0) {
+      const sch = cls.schedules.find((s:any) => s.dayOfWeek === day);
+      if (sch) return `${sch.startTime} - ${sch.endTime}`;
+    }
+    if (cls.day_of_week === day) return `${cls.start_time?.substring(0,5)} - ${cls.end_time?.substring(0,5)}`;
+    if (cls.day_of_week_2 === day) return `${cls.start_time_2?.substring(0,5)} - ${cls.end_time_2?.substring(0,5)}`;
+    return 'Time not set';
   };
 
   if (!isMounted) return <div className="min-h-screen bg-gray-50 flex items-center justify-center pb-32"><p className="text-gray-400 font-bold animate-pulse">Loading...</p></div>;
@@ -173,7 +284,6 @@ export default function AttendancePage() {
           .rate-good { background-color: #dcfce7; color: #15803d; }
           .rate-bad { background-color: #fee2e2; color: #b91c1c; }
           .rate-neutral { background-color: #f1f5f9; color: #64748b; }
-          /* 打印时去掉点击手势效果 */
           .print-no-link { color: inherit !important; text-decoration: none !important; }
         }
       `}} />
@@ -186,7 +296,12 @@ export default function AttendancePage() {
         </div>
       </header>
 
-      {activeView === 'DAILY' && (
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-20 opacity-50 no-print">
+          <Loader2 size={40} className="animate-spin text-blue-500 mb-4" />
+          <p className="text-sm font-bold text-gray-500">Syncing database...</p>
+        </div>
+      ) : activeView === 'DAILY' ? (
         <div className="p-4 mt-2 space-y-4 no-print animate-in fade-in">
           <div className="flex items-center justify-between bg-white rounded-2xl p-2 border border-gray-200 shadow-sm mb-6">
             <button onClick={() => changeDate(-1)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-xl transition-colors"><ChevronLeft size={24} /></button>
@@ -219,7 +334,7 @@ export default function AttendancePage() {
                   <div className="flex justify-between items-start mb-3">
                     <div>
                       <h3 className="font-black text-xl text-gray-900 leading-tight">{cls.name}</h3>
-                      <p className="text-xs text-gray-500 font-bold mt-1">{cls.schedules.find((s:any) => s.day === dayOfWeek)?.startTime} - {cls.schedules.find((s:any) => s.day === dayOfWeek)?.endTime}</p>
+                      <p className="text-xs text-gray-500 font-bold mt-1">{getScheduleTime(cls, dayOfWeek)}</p>
                     </div>
                     {isCompleted ? (
                       <div className="flex flex-col items-end">
@@ -235,9 +350,10 @@ export default function AttendancePage() {
             })
           )}
         </div>
-      )}
+      ) : null}
 
-      {activeView === 'OVERVIEW' && (
+      {/* OVERVIEW 模块代码保持不变，紧接在后 */}
+      {activeView === 'OVERVIEW' && !isLoading && (
         <div className="p-4 mt-2 animate-in fade-in">
           
           <div className="flex justify-between items-center mb-6 no-print">
@@ -300,13 +416,11 @@ export default function AttendancePage() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {playerStats.map((stat, idx) => (
-                    /* 核心升级：增加 onClick，将行变为可点击按钮 */
                     <tr 
                       key={idx} 
                       onClick={() => openPlayerHistory(stat)}
                       className="hover:bg-blue-50 active:bg-blue-100 transition-colors cursor-pointer"
                     >
-                      {/* 将名字显示为显眼的蓝色链接样式 */}
                       <td className="p-4 font-bold text-blue-600 text-sm whitespace-nowrap print-no-link flex items-center">
                         {stat.name}
                       </td>
@@ -350,7 +464,7 @@ export default function AttendancePage() {
             
             <div className="p-4 overflow-y-auto bg-gray-50 flex-1 space-y-3">
               {currentRoster.length === 0 ? (
-                <div className="text-center py-10"><Users size={40} className="mx-auto text-gray-300 mb-2" /><p className="text-gray-500 font-bold">No students in this class.</p></div>
+                <div className="text-center py-10"><Users size={40} className="mx-auto text-gray-300 mb-2" /><p className="text-gray-500 font-bold">No active students found in this class.</p></div>
               ) : (
                 currentRoster.map((player) => (
                   <div key={player.playerId} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
@@ -372,15 +486,15 @@ export default function AttendancePage() {
             </div>
 
             <div className="p-6 border-t border-gray-100 shrink-0 bg-white rounded-b-[2rem]">
-              <button onClick={handleSaveAttendance} className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl flex justify-center items-center space-x-2 active:bg-blue-700 transition-colors shadow-[0_4px_14px_0_rgba(37,99,235,0.39)]">
-                <span>Save Attendance</span>
+              <button onClick={handleSaveAttendance} disabled={isSavingAttendance} className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl flex justify-center items-center space-x-2 active:bg-blue-700 transition-colors shadow-md disabled:bg-blue-400 disabled:cursor-not-allowed">
+                {isSavingAttendance ? <Loader2 size={24} className="animate-spin" /> : <span>Save Attendance</span>}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* --- Modal 2: 核心新增 -> 个人数据下钻详情窗 (Session History) --- */}
+      {/* --- Modal 2: 个人历史流水 --- */}
       {isHistoryModalOpen && selectedPlayerForHistory && (
         <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 no-print z-[60]">
           <div className="bg-white w-full max-w-md rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-300 flex flex-col max-h-[85vh]">
@@ -389,7 +503,6 @@ export default function AttendancePage() {
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h3 className="font-black text-2xl leading-tight text-gray-900">{selectedPlayerForHistory.name}</h3>
-                  {/* 智能同步下拉菜单的时间段提示 */}
                   <p className="text-xs font-bold text-blue-600 bg-blue-50 inline-block px-2 py-1 rounded-md mt-2">
                     {getReportPeriodName()}
                   </p>
@@ -399,7 +512,6 @@ export default function AttendancePage() {
                 </button>
               </div>
 
-              {/* 汇总数据显示 */}
               <div className="grid grid-cols-4 gap-2 mt-4">
                 <div className="bg-gray-50 p-2 rounded-xl text-center">
                   <p className="text-sm font-black">{selectedPlayerForHistory.total}</p>
