@@ -40,7 +40,6 @@ export default function AttendancePage() {
     fetchAcademyData();
   }, []);
 
-  // 🚀 核心更新：从 Supabase 拉取真实的 Classes, Players 和 Attendance 记录
   const fetchAcademyData = async () => {
     try {
       setIsLoading(true);
@@ -53,17 +52,12 @@ export default function AttendancePage() {
       if (currentAcademyId) {
         setAcademyId(currentAcademyId);
 
-        // 1. 获取班级
         const { data: classesData } = await supabase.from('classes').select('*').eq('academy_id', currentAcademyId);
-        
-        // 2. 获取所有活跃球员
         const { data: playersData } = await supabase.from('players').select('*').eq('academy_id', currentAcademyId).eq('status', 'ACTIVE');
         setPlayers(playersData || []);
 
-        // 3. 获取球员和班级的关联记录 (这是我们刚才修复的模块！)
         const { data: enrollmentData } = await supabase.from('player_class').select('*').eq('status', 'ACTIVE');
         
-        // 将关联好的球员塞进对应的班级里
         const classesWithPlayers = (classesData || []).map(cls => {
           const enrolledPlayerIds = enrollmentData?.filter(e => e.class_id === cls.id).map(e => e.player_id) || [];
           const enrolledPlayers = playersData?.filter(p => enrolledPlayerIds.includes(p.id)) || [];
@@ -71,13 +65,10 @@ export default function AttendancePage() {
         });
         setClasses(classesWithPlayers);
 
-        // 4. 获取考勤历史
         const { data: attendanceData } = await supabase.from('attendance').select('*').eq('academy_id', currentAcademyId);
         
-        // 将数据库扁平的 attendance 记录格式化为页面需要的结构
         const formattedAttendances: any[] = [];
         if (attendanceData) {
-          // 按 classId 和 date 分组
           const grouped = attendanceData.reduce((acc: any, curr) => {
             const key = `${curr.class_id}_${curr.date}`;
             if (!acc[key]) acc[key] = { id: key, classId: curr.class_id, date: curr.date, records: [] };
@@ -105,7 +96,6 @@ export default function AttendancePage() {
     setCurrentDate(newDate); 
   };
 
-  // 检查该班级是否在今天有时段 (兼容新旧数据结构)
   const classesToday = classes.filter(cls => {
     if (cls.schedules && cls.schedules.length > 0) {
       return cls.schedules.some((sch: any) => sch.dayOfWeek === dayOfWeek);
@@ -132,7 +122,6 @@ export default function AttendancePage() {
   const handleMarkAllPresent = () => setCurrentRoster(currentRoster.map(r => ({ ...r, status: 'PRESENT' })));
   const updatePlayerStatus = (playerId: string, status: AttendanceStatus) => setCurrentRoster(currentRoster.map(r => r.playerId === playerId ? { ...r, status } : r));
 
-  // 🚀 核心更新：将点名结果真实存入 Supabase 数据库
   const handleSaveAttendance = async () => {
     const unMarked = currentRoster.filter(r => r.status === null);
     if (unMarked.length > 0 && !confirm(`${unMarked.length} students haven't been marked. Do you still want to save?`)) return;
@@ -141,13 +130,13 @@ export default function AttendancePage() {
     setIsSavingAttendance(true);
 
     try {
-      // 1. 先删除这个班级这一天的旧记录（避免重复记录冲突）
+      // 删除当天旧记录，防止重复
       await supabase.from('attendance')
         .delete()
         .eq('class_id', selectedClass.id)
         .eq('date', dateString);
 
-      // 2. 准备需要插入的新数据 (忽略没点名的 null)
+      // 准备批量插入数据
       const payload = currentRoster
         .filter(r => r.status !== null)
         .map(r => ({
@@ -158,13 +147,12 @@ export default function AttendancePage() {
           status: r.status
         }));
 
-      // 3. 批量插入新记录
       if (payload.length > 0) {
         const { error } = await supabase.from('attendance').insert(payload);
         if (error) throw error;
       }
 
-      // 4. 更新前端状态，保证顺滑体验
+      // 成功后，更新本地 UI 状态
       const newRecord = { 
         id: `${selectedClass.id}_${dateString}`, 
         classId: selectedClass.id, 
@@ -352,7 +340,6 @@ export default function AttendancePage() {
         </div>
       ) : null}
 
-      {/* OVERVIEW 模块代码保持不变，紧接在后 */}
       {activeView === 'OVERVIEW' && !isLoading && (
         <div className="p-4 mt-2 animate-in fade-in">
           
