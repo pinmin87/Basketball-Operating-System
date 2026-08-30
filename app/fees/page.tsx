@@ -1,10 +1,20 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { Search, CheckCircle2, AlertCircle, UploadCloud, Calendar, X, CalendarRange, Download, ShieldCheck, Filter } from 'lucide-react';
+import { Search, CheckCircle2, AlertCircle, UploadCloud, Calendar, X, CalendarRange, Download, ShieldCheck, Filter, Loader2 } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+
+// Supabase 初始化
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://knnpacipzzyvluchbykb.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtubnBhY2lwenp5dmx1Y2hieWtiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczODM2NjYsImV4cCI6MjEwMjk1OTY2Nn0.NnP85JAAv5KP-8_iWpEkgG_D9dwlbB68-mh-x6clNFA';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 function FeesContent() {
   const [isMounted, setIsMounted] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [academyId, setAcademyId] = useState<string | null>(null);
+
   const [feeRecords, setFeeRecords] = useState<any[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
   
@@ -24,25 +34,100 @@ function FeesContent() {
 
   useEffect(() => {
     setIsMounted(true);
-    const savedClasses = localStorage.getItem('academy_classes');
-    if (savedClasses) { try { setClasses(JSON.parse(savedClasses)); } catch (e) {} }
-
-    const savedFees = localStorage.getItem('academy_fees');
-    if (savedFees) {
-      try { setFeeRecords(JSON.parse(savedFees)); } catch (e) {}
-    } else {
-      const initialRecords = [
-        { id: 'f1', playerId: 'p1', playerName: 'Ahmad bin Ali', className: 'Foundation Primary', monthlyFee: 120, amountPaid: 120, paymentDate: '2026-08-15', paymentMethod: 'Touch n Go', reference: 'TNG-112', status: 'PAID' },
-        { id: 'f2', playerId: 'p2', playerName: 'Jason Lee', className: 'Development Primary', monthlyFee: 160, amountPaid: 0, paymentDate: '', paymentMethod: 'Bank Transfer', reference: '', status: 'UNPAID' },
-      ];
-      setFeeRecords(initialRecords);
-      localStorage.setItem('academy_fees', JSON.stringify(initialRecords));
-    }
+    fetchFinancialData();
   }, []);
 
-  useEffect(() => {
-    if (isMounted) localStorage.setItem('academy_fees', JSON.stringify(feeRecords));
-  }, [feeRecords, isMounted]);
+  // 🚀 核心升级：从 Supabase 动态拉取和合并数据
+  const fetchFinancialData = async () => {
+    try {
+      setIsLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data: profile } = await supabase.from('profiles').select('academy_id').eq('id', session.user.id).single();
+      const currentAcademyId = profile?.academy_id;
+
+      if (currentAcademyId) {
+        setAcademyId(currentAcademyId);
+
+        // 并发拉取 4 张表，速度最快
+        const [classesRes, playersRes, enrollmentsRes, feesRes] = await Promise.all([
+          supabase.from('classes').select('*').eq('academy_id', currentAcademyId),
+          supabase.from('players').select('*').eq('academy_id', currentAcademyId),
+          supabase.from('player_class').select('*').eq('status', 'ACTIVE'),
+          supabase.from('fee_records').select('*').eq('academy_id', currentAcademyId)
+        ]);
+
+        const classesData = classesRes.data || [];
+        const playersData = playersRes.data || [];
+        const enrollmentsData = enrollmentsRes.data || [];
+        const dbFeesData = feesRes.data || [];
+
+        setClasses(classesData);
+
+        const currentMonth = new Date().toISOString().substring(0, 7); // 'YYYY-MM'
+        const combinedRecords: any[] = [];
+
+        // 1. 映射数据库中已有的真实收费记录
+        dbFeesData.forEach(fee => {
+          const player = playersData.find(p => p.id === fee.player_id);
+          const cls = classesData.find(c => c.id === fee.class_id);
+          if (player && cls) {
+            combinedRecords.push({
+              id: fee.id,
+              isVirtual: false,
+              playerId: player.id,
+              playerName: player.name,
+              classId: cls.id,
+              className: cls.name,
+              monthlyFee: Number(fee.amount_due),
+              amountPaid: Number(fee.amount_paid),
+              paymentDate: fee.payment_date || '', 
+              paymentMethod: fee.payment_method || 'Bank Transfer',
+              reference: fee.reference_number || '',
+              status: fee.status,
+              billingMonth: fee.billing_month
+            });
+          }
+        });
+
+        // 2. 为当前活跃但还没生成本月账单的学生，生成虚拟 UNPAID 账单
+        enrollmentsData.forEach(enroll => {
+          const hasCurrentMonthRecord = dbFeesData.some(f => f.player_id === enroll.player_id && f.class_id === enroll.class_id && f.billing_month === currentMonth);
+          
+          if (!hasCurrentMonthRecord) {
+            const player = playersData.find(p => p.id === enroll.player_id);
+            const cls = classesData.find(c => c.id === enroll.class_id);
+            if (player && cls) {
+              combinedRecords.push({
+                id: `virtual_${enroll.id}`,
+                isVirtual: true,
+                playerId: player.id,
+                playerName: player.name,
+                classId: cls.id,
+                className: cls.name,
+                monthlyFee: Number(cls.monthly_fee || 0),
+                amountPaid: 0,
+                paymentDate: '', // 留空，配合您的 local filter 逻辑
+                paymentMethod: 'Bank Transfer',
+                reference: '',
+                status: 'UNPAID',
+                billingMonth: currentMonth
+              });
+            }
+          }
+        });
+
+        // 按学生名字排序
+        combinedRecords.sort((a, b) => a.playerName.localeCompare(b.playerName));
+        setFeeRecords(combinedRecords);
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const now = new Date();
   const todayStr = now.toISOString().split('T')[0];
@@ -53,6 +138,7 @@ function FeesContent() {
   sevenDaysAgoDate.setDate(now.getDate() - 7);
   const lastWeekStr = sevenDaysAgoDate.toISOString().split('T')[0];
 
+  // 您的过滤逻辑 (完美保留)
   const filteredByTimeAndClass = feeRecords.filter(record => {
     const targetDate = record.paymentDate || todayStr;
     let matchTime = true;
@@ -90,27 +176,57 @@ function FeesContent() {
     setIsModalOpen(true);
   };
 
-  const handleSavePayment = () => {
+  // 🚀 核心升级：将您的 Payment UI 与 Supabase 对接
+  const handleSavePayment = async () => {
     const amountEntered = Number(paymentAmount);
     if (amountEntered < 0) return alert('Please enter a valid amount.');
+    if (!academyId || !selectedRecord) return;
 
-    setFeeRecords(feeRecords.map(record => {
-      if (record.id === selectedRecord.id) {
-        const cappedPaid = amountEntered > record.monthlyFee ? record.monthlyFee : amountEntered;
-        let newStatus = 'UNPAID';
-        if (cappedPaid >= record.monthlyFee) newStatus = 'PAID';
-        else if (cappedPaid > 0) newStatus = 'PARTIAL';
+    setIsSaving(true);
 
-        return { 
-          ...record, amountPaid: cappedPaid, paymentDate: paymentDate, paymentMethod: paymentMethod, reference: receiptRef, status: newStatus 
-        };
+    try {
+      const cappedPaid = amountEntered > selectedRecord.monthlyFee ? selectedRecord.monthlyFee : amountEntered;
+      let newStatus = 'UNPAID';
+      if (cappedPaid >= selectedRecord.monthlyFee) newStatus = 'PAID';
+      else if (cappedPaid > 0) newStatus = 'PARTIAL';
+
+      const payload = {
+        academy_id: academyId,
+        player_id: selectedRecord.playerId,
+        class_id: selectedRecord.classId,
+        billing_month: selectedRecord.billingMonth,
+        amount_due: selectedRecord.monthlyFee,
+        amount_paid: cappedPaid,
+        status: newStatus,
+        payment_date: paymentDate || new Date().toISOString().split('T')[0],
+        payment_method: paymentMethod,
+        reference_number: receiptRef
+      };
+
+      if (selectedRecord.isVirtual) {
+        // 全新生成插入
+        const { error } = await supabase.from('fee_records').insert([payload]);
+        if (error) throw error;
+      } else {
+        // 更新已有记录
+        const { error } = await supabase.from('fee_records').update(payload).eq('id', selectedRecord.id);
+        if (error) throw error;
       }
-      return record;
-    }));
-    setIsModalOpen(false);
+
+      // 关闭弹窗并重新拉取最新数据刷新 UI
+      setIsModalOpen(false);
+      await fetchFinancialData();
+      alert('Payment recorded successfully!');
+
+    } catch (error: any) {
+      console.error('Payment save error:', error);
+      alert(`Failed to save payment: ${error.message}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  if (!isMounted) return <div className="h-full flex items-center justify-center"><p className="text-gray-400 font-bold animate-pulse">Loading Fees...</p></div>;
+  if (!isMounted) return <div className="h-screen flex flex-col items-center justify-center bg-gray-50"><Loader2 className="animate-spin text-blue-500 mb-4" size={40} /><p className="text-gray-400 font-bold">Loading Financial Center...</p></div>;
 
   return (
     <div className="bg-gray-50 min-h-full pb-10 print:bg-white print:pb-0 print:p-8">
@@ -134,71 +250,87 @@ function FeesContent() {
         </div>
       </header>
 
-      <div className="px-4 mt-4 no-print space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="bg-white p-2 rounded-2xl border border-gray-200 shadow-sm flex items-center">
-            <CalendarRange size={18} className="text-blue-500 ml-3 mr-3 shrink-0" />
-            <select value={timeframe} onChange={(e) => setTimeframe(e.target.value as any)} className="w-full bg-transparent font-bold text-[15px] text-gray-800 focus:outline-none py-2 outline-none appearance-none">
-              <option value="TODAY">Today</option><option value="LAST_WEEK">Last 7 Days</option><option value="THIS_MONTH">This Month</option><option value="LAST_MONTH">Last Month</option><option value="CUSTOM">Custom Date...</option>
-            </select>
-          </div>
-          <div className="bg-white p-2 rounded-2xl border border-gray-200 shadow-sm flex items-center">
-            <Filter size={18} className="text-blue-500 ml-3 mr-3 shrink-0" />
-            <select value={selectedClassFilter} onChange={(e) => setSelectedClassFilter(e.target.value)} className="w-full bg-transparent font-bold text-[15px] text-gray-800 focus:outline-none py-2 outline-none appearance-none">
-              <option value="ALL">All Classes</option>
-              {classes.map((cls: any) => (<option key={cls.id} value={cls.name}>{cls.name}</option>))}
-            </select>
-          </div>
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-20 opacity-50 no-print">
+          <Loader2 size={40} className="animate-spin text-blue-500 mb-4" />
+          <p className="text-sm font-bold text-gray-500">Syncing with database...</p>
         </div>
-
-        {timeframe === 'CUSTOM' && (
-          <div className="grid grid-cols-2 gap-3 bg-blue-50/50 p-3 rounded-2xl border border-blue-100 animate-in slide-in-from-top-2">
-            <div><label className="block text-[10px] font-black text-blue-600 uppercase tracking-wider mb-1">From</label><input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-[15px] font-bold focus:outline-none" /></div>
-            <div><label className="block text-[10px] font-black text-blue-600 uppercase tracking-wider mb-1">To</label><input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-[15px] font-bold focus:outline-none" /></div>
-          </div>
-        )}
-
-        {/* 完全写死了样式，没有任何外部函数引用 */}
-        <div className="flex bg-gray-200/60 p-1.5 rounded-2xl">
-          <button onClick={() => setActiveTab('UNPAID')} className={`flex-1 py-3 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'UNPAID' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>UNPAID</button>
-          <button onClick={() => setActiveTab('PAID')} className={`flex-1 py-3 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'PAID' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>PAID</button>
-          <button onClick={() => setActiveTab('ALL')} className={`flex-1 py-3 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'ALL' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>ALL</button>
-        </div>
-      </div>
-
-      <div className="hidden print-only mb-6"><div style={{ borderBottom: '2px solid #2563eb', paddingBottom: '16px', marginBottom: '24px' }}><h1 className="text-3xl font-black text-gray-900" style={{ color: '#1e3a8a' }}>Academy Fee Report</h1></div></div>
-
-      <div className="p-4 space-y-4 no-print pb-24">
-        {finalFilteredRecords.map((record) => {
-          const balance = record.monthlyFee - record.amountPaid;
-          const isPaid = record.status === 'PAID';
-          return (
-            <div key={record.id} className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-gray-100 flex flex-col active:scale-[0.99] transition-transform">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-black text-gray-900 text-lg">{record.playerName}</p>
-                  <p className="text-xs font-bold text-gray-500 mb-3 mt-0.5">{record.className} • Due: RM {record.monthlyFee}</p>
-                  {isPaid ? (
-                    <span className="inline-flex items-center text-[10px] font-black px-2.5 py-1.5 rounded-md bg-green-50 text-green-600 border border-green-100"><CheckCircle2 size={14} className="mr-1.5" /> PAID: RM {record.amountPaid} ({record.paymentMethod})</span>
-                  ) : (
-                    <span className="inline-flex items-center text-[10px] font-black px-2.5 py-1.5 rounded-md bg-red-50 text-red-600 border border-red-100"><AlertCircle size={14} className="mr-1.5" /> BALANCE DUE: RM {balance}</span>
-                  )}
-                </div>
-                <div className="ml-4 shrink-0">
-                  <button onClick={() => openPaymentModal(record)} className="text-xs font-black text-blue-600 bg-blue-50 hover:bg-blue-100 px-5 py-3 rounded-xl transition-colors border border-blue-100">{record.amountPaid > 0 ? 'Edit' : 'Record'}</button>
-                </div>
+      ) : (
+        <>
+          <div className="px-4 mt-4 no-print space-y-3 animate-in fade-in">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="bg-white p-2 rounded-2xl border border-gray-200 shadow-sm flex items-center">
+                <CalendarRange size={18} className="text-blue-500 ml-3 mr-3 shrink-0" />
+                <select value={timeframe} onChange={(e) => setTimeframe(e.target.value as any)} className="w-full bg-transparent font-bold text-[15px] text-gray-800 focus:outline-none py-2 outline-none appearance-none">
+                  <option value="TODAY">Today</option><option value="LAST_WEEK">Last 7 Days</option><option value="THIS_MONTH">This Month</option><option value="LAST_MONTH">Last Month</option><option value="CUSTOM">Custom Date...</option>
+                </select>
+              </div>
+              <div className="bg-white p-2 rounded-2xl border border-gray-200 shadow-sm flex items-center">
+                <Filter size={18} className="text-blue-500 ml-3 mr-3 shrink-0" />
+                <select value={selectedClassFilter} onChange={(e) => setSelectedClassFilter(e.target.value)} className="w-full bg-transparent font-bold text-[15px] text-gray-800 focus:outline-none py-2 outline-none appearance-none">
+                  <option value="ALL">All Classes</option>
+                  {classes.map((cls: any) => (<option key={cls.id} value={cls.name}>{cls.name}</option>))}
+                </select>
               </div>
             </div>
-          );
-        })}
-      </div>
 
-      <div className="hidden print-only">
-        <table>
-          <thead><tr><th>Player Name</th><th>Class</th><th>Due</th><th>Paid</th><th>Balance</th><th>Status</th><th>Date</th></tr></thead>
-          <tbody>{finalFilteredRecords.map((r, i) => (<tr key={i}><td>{r.playerName}</td><td>{r.className}</td><td>RM {r.monthlyFee}</td><td>RM {r.amountPaid}</td><td>RM {r.monthlyFee - r.amountPaid}</td><td>{r.status}</td><td>{r.paymentDate || '-'}</td></tr>))}</tbody>
-        </table>
-      </div>
+            {timeframe === 'CUSTOM' && (
+              <div className="grid grid-cols-2 gap-3 bg-blue-50/50 p-3 rounded-2xl border border-blue-100 animate-in slide-in-from-top-2">
+                <div><label className="block text-[10px] font-black text-blue-600 uppercase tracking-wider mb-1">From</label><input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-[15px] font-bold focus:outline-none" /></div>
+                <div><label className="block text-[10px] font-black text-blue-600 uppercase tracking-wider mb-1">To</label><input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-[15px] font-bold focus:outline-none" /></div>
+              </div>
+            )}
+
+            <div className="flex bg-gray-200/60 p-1.5 rounded-2xl">
+              <button onClick={() => setActiveTab('UNPAID')} className={`flex-1 py-3 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'UNPAID' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>UNPAID</button>
+              <button onClick={() => setActiveTab('PAID')} className={`flex-1 py-3 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'PAID' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>PAID</button>
+              <button onClick={() => setActiveTab('ALL')} className={`flex-1 py-3 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'ALL' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>ALL</button>
+            </div>
+          </div>
+
+          <div className="hidden print-only mb-6"><div style={{ borderBottom: '2px solid #2563eb', paddingBottom: '16px', marginBottom: '24px' }}><h1 className="text-3xl font-black text-gray-900" style={{ color: '#1e3a8a' }}>Academy Fee Report</h1></div></div>
+
+          <div className="p-4 space-y-4 no-print pb-24 animate-in fade-in">
+            {finalFilteredRecords.map((record) => {
+              const balance = record.monthlyFee - record.amountPaid;
+              const isPaid = record.status === 'PAID';
+              return (
+                <div key={record.id} className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-gray-100 flex flex-col active:scale-[0.99] transition-transform">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-black text-gray-900 text-lg">{record.playerName}</p>
+                      <p className="text-xs font-bold text-gray-500 mb-3 mt-0.5">{record.className} • Due: RM {record.monthlyFee}</p>
+                      {isPaid ? (
+                        <span className="inline-flex items-center text-[10px] font-black px-2.5 py-1.5 rounded-md bg-green-50 text-green-600 border border-green-100"><CheckCircle2 size={14} className="mr-1.5" /> PAID: RM {record.amountPaid} ({record.paymentMethod})</span>
+                      ) : (
+                        <span className="inline-flex items-center text-[10px] font-black px-2.5 py-1.5 rounded-md bg-red-50 text-red-600 border border-red-100"><AlertCircle size={14} className="mr-1.5" /> BALANCE DUE: RM {balance}</span>
+                      )}
+                    </div>
+                    <div className="ml-4 shrink-0">
+                      <button onClick={() => openPaymentModal(record)} className="text-xs font-black text-blue-600 bg-blue-50 hover:bg-blue-100 px-5 py-3 rounded-xl transition-colors border border-blue-100">{record.amountPaid > 0 ? 'Edit' : 'Record'}</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            
+            {finalFilteredRecords.length === 0 && (
+              <div className="text-center py-10 bg-white rounded-[1.5rem] border border-gray-100 shadow-sm mt-4">
+                <ShieldCheck size={48} className="mx-auto text-gray-200 mb-3" />
+                <p className="text-gray-500 font-bold text-lg">No records found</p>
+                <p className="text-xs text-gray-400 font-medium">Everyone is paid up or filters don't match.</p>
+              </div>
+            )}
+          </div>
+
+          <div className="hidden print-only">
+            <table>
+              <thead><tr><th>Player Name</th><th>Class</th><th>Due</th><th>Paid</th><th>Balance</th><th>Status</th><th>Date</th></tr></thead>
+              <tbody>{finalFilteredRecords.map((r, i) => (<tr key={i}><td>{r.playerName}</td><td>{r.className}</td><td>RM {r.monthlyFee}</td><td>RM {r.amountPaid}</td><td>RM {r.monthlyFee - r.amountPaid}</td><td>{r.status}</td><td>{r.paymentDate || '-'}</td></tr>))}</tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {isModalOpen && selectedRecord && (
         <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[60] flex items-end justify-center">
@@ -249,8 +381,13 @@ function FeesContent() {
             </div>
 
             <div className="p-6 pb-12 border-t border-gray-100 shrink-0 bg-white">
-              <button type="button" onClick={handleSavePayment} className="w-full bg-blue-600 text-white font-black text-lg py-4 rounded-2xl active:bg-blue-700 active:scale-95 transition-all shadow-[0_8px_20px_-8px_rgba(37,99,235,0.5)]">
-                Save Payment Record
+              <button 
+                type="button" 
+                disabled={isSaving}
+                onClick={handleSavePayment} 
+                className="w-full bg-blue-600 text-white font-black text-lg py-4 rounded-2xl active:bg-blue-700 active:scale-95 transition-all shadow-[0_8px_20px_-8px_rgba(37,99,235,0.5)] flex justify-center items-center disabled:opacity-70"
+              >
+                {isSaving ? <Loader2 size={24} className="animate-spin" /> : <span>Save Payment Record</span>}
               </button>
             </div>
           </div>
@@ -260,4 +397,6 @@ function FeesContent() {
   );
 }
 
-export default function FeesPage() { return <Suspense fallback={<div>Loading...</div>}><FeesContent /></Suspense>; }
+export default function FeesPage() { 
+  return <Suspense fallback={<div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-500" size={32}/></div>}><FeesContent /></Suspense>; 
+}
