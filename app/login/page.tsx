@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
-import { Mail, Lock, User, Phone, ArrowRight, Loader2 } from 'lucide-react';
+import { Mail, Lock, User, Phone, ArrowRight, Loader2, Eye, EyeOff } from 'lucide-react';
 
 // 初始化 Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://knnpacipzzyvluchbykb.supabase.co';
@@ -16,6 +16,9 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  
+  // 💡 新增：控制密码是否可见的状态
+  const [showPassword, setShowPassword] = useState(false);
 
   // 表单状态
   const [formData, setFormData] = useState({
@@ -101,7 +104,6 @@ export default function LoginPage() {
               <path d="M19.07 19.07A10 10 0 0 1 14.1 12a10 10 0 0 1 4.97-7.07" />
             </svg>
           </div>
-          {/* 📝 标题修改 */}
           <h1 className="text-3xl font-black text-white">Basketball Academy</h1>
           <p className="text-blue-100 font-medium mt-1">Operating System</p>
         </div>
@@ -168,17 +170,26 @@ export default function LoginPage() {
               />
             </div>
 
+            {/* 💡 修改：密码输入框，加入眼睛图标并调整右侧 padding (pr-12) */}
             <div className="relative">
               <Lock size={18} className="absolute left-4 top-4 text-gray-400" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 name="password"
                 required
                 placeholder="Password"
                 value={formData.password}
                 onChange={handleChange}
-                className="w-full bg-gray-50 border border-gray-200 rounded-2xl pl-11 pr-4 py-3.5 text-[15px] font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full bg-gray-50 border border-gray-200 rounded-2xl pl-11 pr-12 py-3.5 text-[15px] font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-4 text-gray-400 hover:text-blue-500 active:scale-95 transition-all"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
 
             <button
@@ -205,6 +216,7 @@ export default function LoginPage() {
                 onClick={() => {
                   setIsLogin(!isLogin);
                   setErrorMsg('');
+                  setShowPassword(false); // 切换时顺便重置密码可见状态
                   setFormData({ email: '', password: '', fullName: '', phone: '' });
                 }}
                 className="ml-2 text-blue-600 hover:text-blue-700 active:text-blue-800 transition-colors"
