@@ -4,12 +4,40 @@ import { useState, useEffect } from 'react';
 import { Search, Plus, MapPin, Clock, Users, CalendarDays, Edit3, Trash2, Loader2, DollarSign, X, UserPlus, UserMinus, Save } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
+// 初始化 Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://knnpacipzzyvluchbykb.supabase.co';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtubnBhY2lwenp5dmx1Y2hieWtiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczODM2NjYsImV4cCI6MjEwMjk1OTY2Nn0.NnP85JAAv5KP-8_iWpEkgG_D9dwlbB68-mh-x6clNFA';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const DEFAULT_CLASS = { 
-  name: '', skillLevel: 'Foundation', venue: '', monthlyFee: '', capacity: 20,
+// --- TypeScript 接口定义 ---
+interface Schedule {
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+}
+
+interface ClassData {
+  id?: string;
+  name: string;
+  skillLevel: string;
+  venue: string;
+  monthlyFee: string | number;
+  capacity: number;
+  schedules: Schedule[];
+}
+
+interface Player {
+  id: string | number;
+  name: string;
+  parent_phone: string | null;
+}
+
+const DEFAULT_CLASS: ClassData = { 
+  name: '', 
+  skillLevel: 'Foundation', 
+  venue: '', 
+  monthlyFee: '', 
+  capacity: 20,
   schedules: [{ dayOfWeek: 'Saturday', startTime: '08:00', endTime: '10:00' }]
 };
 
@@ -18,18 +46,21 @@ export default function ClassesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [academyId, setAcademyId] = useState<string | null>(null);
 
+  // 列表与状态
   const [classes, setClasses] = useState<any[]>([]);
   const [enrolledCounts, setEnrolledCounts] = useState<Record<string, number>>({});
   const [searchQuery, setSearchQuery] = useState('');
   
+  // 课程表单 Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [classForm, setClassForm] = useState<any>(DEFAULT_CLASS);
+  const [classForm, setClassForm] = useState<ClassData>(DEFAULT_CLASS);
   const [isSaving, setIsSaving] = useState(false);
 
+  // 球员管理 Modal
   const [isManagePlayersOpen, setIsManagePlayersOpen] = useState(false);
   const [currentManageClass, setCurrentManageClass] = useState<any>(null);
-  const [allPlayers, setAllPlayers] = useState<any[]>([]);
+  const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [classPlayers, setClassPlayers] = useState<string[]>([]); 
   const [draftClassPlayers, setDraftClassPlayers] = useState<string[]>([]); 
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
@@ -45,21 +76,29 @@ export default function ClassesPage() {
     try {
       setIsLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      if (!session) {
+        setIsLoading(false);
+        return;
+      }
 
       const { data: profile } = await supabase.from('profiles').select('academy_id').eq('id', session.user.id).single();
       const currentAcademyId = profile?.academy_id;
 
       if (currentAcademyId) {
         setAcademyId(currentAcademyId);
-        const { data: classesData, error } = await supabase.from('classes').select('*').eq('academy_id', currentAcademyId).order('created_at', { ascending: false });
-        if (error) throw error;
-        setClasses(classesData || []);
+        
+        // 并行请求以提升加载速度
+        const [classesResponse, enrollmentResponse] = await Promise.all([
+          supabase.from('classes').select('*').eq('academy_id', currentAcademyId).order('created_at', { ascending: false }),
+          supabase.from('player_class').select('class_id, status').eq('academy_id', currentAcademyId)
+        ]);
 
-        const { data: enrollmentData } = await supabase.from('player_class').select('class_id, status').eq('academy_id', currentAcademyId);
-        if (enrollmentData) {
+        if (classesResponse.error) throw classesResponse.error;
+        setClasses(classesResponse.data || []);
+
+        if (enrollmentResponse.data) {
           const counts: Record<string, number> = {};
-          enrollmentData.forEach((row: any) => {
+          enrollmentResponse.data.forEach((row: any) => {
             if (row.status && String(row.status).trim().toUpperCase() === 'ACTIVE') {
               counts[row.class_id] = (counts[row.class_id] || 0) + 1;
             }
@@ -77,21 +116,21 @@ export default function ClassesPage() {
   const filteredClasses = classes.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const handleAddSession = () => {
-    setClassForm((prev: any) => ({
+    setClassForm((prev) => ({
       ...prev,
       schedules: [...prev.schedules, { dayOfWeek: 'Sunday', startTime: '08:00', endTime: '10:00' }]
     }));
   };
 
   const handleRemoveSession = (indexToRemove: number) => {
-    setClassForm((prev: any) => ({
+    setClassForm((prev) => ({
       ...prev,
-      schedules: prev.schedules.filter((_: any, idx: number) => idx !== indexToRemove)
+      schedules: prev.schedules.filter((_, idx) => idx !== indexToRemove)
     }));
   };
 
-  const handleSessionChange = (index: number, field: string, value: string) => {
-    setClassForm((prev: any) => {
+  const handleSessionChange = (index: number, field: keyof Schedule, value: string) => {
+    setClassForm((prev) => {
       const newSchedules = [...prev.schedules];
       newSchedules[index] = { ...newSchedules[index], [field]: value };
       return { ...prev, schedules: newSchedules };
@@ -99,7 +138,9 @@ export default function ClassesPage() {
   };
 
   const handleSaveClass = async () => {
-    if (!classForm.name || !classForm.monthlyFee) return alert('Class Name and Monthly Fee are required!');
+    if (!classForm.name || !classForm.monthlyFee) {
+      return alert('Class Name and Monthly Fee are required!');
+    }
     if (!academyId) return alert('Authentication Error. Please re-login.');
 
     setIsSaving(true);
@@ -111,7 +152,12 @@ export default function ClassesPage() {
       monthly_fee: Number(classForm.monthlyFee),
       capacity: Number(classForm.capacity),
       schedules: classForm.schedules, 
-      day_of_week: null, start_time: null, end_time: null, day_of_week_2: null, start_time_2: null, end_time_2: null
+      day_of_week: null, 
+      start_time: null, 
+      end_time: null, 
+      day_of_week_2: null, 
+      start_time_2: null, 
+      end_time_2: null
     };
 
     try {
@@ -122,7 +168,7 @@ export default function ClassesPage() {
         const { error } = await supabase.from('classes').insert([payload]);
         if (error) throw error;
       }
-      fetchClasses();
+      await fetchClasses();
       setIsModalOpen(false);
     } catch (error: any) {
       alert(`Failed to save class: ${error.message}`);
@@ -145,9 +191,10 @@ export default function ClassesPage() {
 
   const openEditModal = (cls: any) => {
     setEditingId(cls.id);
-    let loadedSchedules = cls.schedules;
-    if (!loadedSchedules || loadedSchedules.length === 0) {
-      loadedSchedules = [];
+    let loadedSchedules: Schedule[] = cls.schedules || [];
+    
+    // 兼容旧数据库结构的平滑过渡
+    if (!loadedSchedules.length) {
       if (cls.day_of_week) {
         loadedSchedules.push({
           dayOfWeek: cls.day_of_week,
@@ -192,13 +239,15 @@ export default function ClassesPage() {
     }
 
     try {
-      const { data: playersData } = await supabase.from('players').select('id, name, parent_phone').eq('academy_id', academyId).eq('status', 'ACTIVE').order('name');
-      setAllPlayers(playersData || []);
+      const [playersData, enrollmentData] = await Promise.all([
+        supabase.from('players').select('id, name, parent_phone').eq('academy_id', academyId).eq('status', 'ACTIVE').order('name'),
+        supabase.from('player_class').select('player_id, status').eq('class_id', cls.id)
+      ]);
 
-      const { data: enrollmentData } = await supabase.from('player_class').select('player_id, status').eq('class_id', cls.id);
+      setAllPlayers(playersData.data || []);
       
-      const enrolledIds = enrollmentData 
-        ? enrollmentData.filter(e => e.status && String(e.status).trim().toUpperCase() === 'ACTIVE').map(e => String(e.player_id)) 
+      const enrolledIds = enrollmentData.data 
+        ? enrollmentData.data.filter(e => e.status && String(e.status).trim().toUpperCase() === 'ACTIVE').map(e => String(e.player_id)) 
         : [];
       
       setClassPlayers(enrolledIds);
@@ -210,7 +259,7 @@ export default function ClassesPage() {
     }
   };
 
-  const togglePlayerDraft = (playerId: any, isCurrentlyEnrolled: boolean) => {
+  const togglePlayerDraft = (playerId: string | number, isCurrentlyEnrolled: boolean) => {
     const strId = String(playerId);
     if (isCurrentlyEnrolled) {
       setDraftClassPlayers(prev => prev.filter(id => id !== strId));
@@ -219,7 +268,7 @@ export default function ClassesPage() {
     }
   };
 
-  // 🚀 最终净化的保存逻辑：彻底移除所有非核心字段 (start_date / end_date)，100% 契合现有数据库
+  // 差量同步策略：只更新变动的球员数据
   const handleSavePlayers = async () => {
     if (!currentManageClass || !academyId) return;
     setIsSavingPlayers(true);
@@ -232,7 +281,7 @@ export default function ClassesPage() {
     const playersToActivate = newDraftIds.filter(id => !currentClassPlayerIds.includes(id));
 
     try {
-      // 1. 移除球员 (只更新 status 为 INACTIVE)
+      // 1. 移除球员 (软删除，更新 status 为 INACTIVE)
       for (const pid of playersToDeactivate) {
         const { error } = await supabase
           .from('player_class')
@@ -243,7 +292,7 @@ export default function ClassesPage() {
         if (error) throw new Error(`Failed to remove player: ${error.message}`);
       }
 
-      // 2. 添加球员 (激活或插入)
+      // 2. 添加球员 (激活已存在的或插入新的)
       for (const pid of playersToActivate) {
         const { data: existingRecords, error: checkErr } = await supabase
           .from('player_class')
@@ -278,7 +327,7 @@ export default function ClassesPage() {
       setClassPlayers(newDraftIds);
       setIsManagePlayersOpen(false);
       
-      await fetchClasses();
+      await fetchClasses(); // 刷新总人数
       alert('Players updated successfully!');
 
     } catch (error: any) {
@@ -298,7 +347,7 @@ export default function ClassesPage() {
   };
 
   const renderSchedulesForCard = (cls: any) => {
-    let schedulesToRender: any[] = [];
+    let schedulesToRender: Schedule[] = [];
     
     if (cls.schedules && cls.schedules.length > 0) {
       schedulesToRender = cls.schedules;
@@ -313,7 +362,7 @@ export default function ClassesPage() {
 
     if (schedulesToRender.length === 0) return <div className="text-xs text-gray-400 font-bold">No schedule</div>;
       
-    return schedulesToRender.map((s: any, idx: number) => {
+    return schedulesToRender.map((s, idx) => {
       if (!s.dayOfWeek) return null;
       return (
         <div key={idx} className={`flex flex-col ${idx > 0 ? 'pt-2 border-t border-gray-200/50 mt-2' : ''}`}>
@@ -330,13 +379,17 @@ export default function ClassesPage() {
 
   if (!isMounted) return <div className="h-full flex items-center justify-center"><p className="text-gray-400 font-bold">Loading...</p></div>;
 
-  const filteredModalPlayers = allPlayers.filter(p => p.name.toLowerCase().includes(playerSearchQuery.toLowerCase()) || (p.parent_phone && p.parent_phone.includes(playerSearchQuery)));
+  const filteredModalPlayers = allPlayers.filter(p => 
+    p.name.toLowerCase().includes(playerSearchQuery.toLowerCase()) || 
+    (p.parent_phone && p.parent_phone.includes(playerSearchQuery))
+  );
 
   const enrolledModalPlayers = filteredModalPlayers.filter(p => draftClassPlayers.includes(String(p.id)));
   const availableModalPlayers = filteredModalPlayers.filter(p => !draftClassPlayers.includes(String(p.id)));
 
   return (
     <div className="bg-gray-50 min-h-full pb-10">
+      {/* 头部搜索与导航 */}
       <header className="bg-blue-600 text-white p-4 pt-safe pb-6 rounded-b-[2.5rem] shadow-md sticky top-0 z-10">
         <div className="flex justify-between items-center mb-4 mt-2">
           <h1 className="text-2xl font-black">Classes</h1>
@@ -350,6 +403,7 @@ export default function ClassesPage() {
         </div>
       </header>
 
+      {/* 课程列表区 */}
       <div className="p-4 space-y-4">
         {isLoading ? (
            <div className="flex flex-col items-center justify-center py-20 opacity-50">
@@ -410,7 +464,7 @@ export default function ClassesPage() {
               </div>
               <div className="relative">
                 <Search size={18} className="absolute left-4 top-3.5 text-gray-400" />
-                <input type="text" placeholder="Search players..." value={playerSearchQuery} onChange={(e) => setPlayerSearchQuery(e.target.value)} className="w-full bg-gray-100 text-gray-900 placeholder-gray-400 rounded-2xl pl-11 pr-4 py-3.5 text-[16px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="text" placeholder="Search players by name or phone..." value={playerSearchQuery} onChange={(e) => setPlayerSearchQuery(e.target.value)} className="w-full bg-gray-100 text-gray-900 placeholder-gray-400 rounded-2xl pl-11 pr-4 py-3.5 text-[16px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             </div>
             
@@ -499,7 +553,7 @@ export default function ClassesPage() {
                 </div>
                 <div>
                   <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Capacity</label>
-                  <input type="number" value={classForm.capacity} onChange={(e) => setClassForm({...classForm, capacity: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 font-bold text-[16px] text-gray-900 outline-none" />
+                  <input type="number" value={classForm.capacity} onChange={(e) => setClassForm({...classForm, capacity: Number(e.target.value)})} className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 font-bold text-[16px] text-gray-900 outline-none" />
                 </div>
               </div>
 
@@ -515,7 +569,7 @@ export default function ClassesPage() {
 
               <div className="space-y-4">
                 <h4 className="text-[11px] font-black text-gray-500 uppercase tracking-widest border-b border-gray-200 pb-2">Training Schedules</h4>
-                {classForm.schedules.map((session: any, index: number) => (
+                {classForm.schedules.map((session, index) => (
                   <div key={index} className="bg-gray-50 p-4 rounded-2xl border border-gray-200 space-y-4 relative">
                     <div className="flex justify-between items-center border-b border-gray-200 pb-2">
                       <h4 className={`text-[11px] font-black uppercase tracking-widest ${index > 0 ? 'text-indigo-500' : 'text-blue-500'}`}>Session {index + 1}</h4>
@@ -549,7 +603,8 @@ export default function ClassesPage() {
 
             </div>
             <div className="p-6 pb-safe border-t border-gray-100 shrink-0 bg-white shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
-              <button onClick={handleSaveClass} disabled={isSaving} className="w-full bg-blue-600 text-white font-black text-lg py-4 rounded-2xl active:bg-blue-700 shadow-md disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors">
+              <button onClick={handleSaveClass} disabled={isSaving} className="w-full bg-blue-600 text-white font-black text-lg py-4 rounded-2xl active:bg-blue-700 shadow-md disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors flex justify-center items-center">
+                {isSaving ? <Loader2 size={24} className="animate-spin mr-2" /> : null}
                 {isSaving ? 'Saving...' : (editingId ? 'Save Changes' : 'Create Class')}
               </button>
             </div>
