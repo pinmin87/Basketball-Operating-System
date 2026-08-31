@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
-import { Mail, Lock, User, Phone, ArrowRight, Loader2, ShieldCheck } from 'lucide-react';
+import { Mail, Lock, User, Phone, ArrowRight, Loader2 } from 'lucide-react';
 
 // 初始化 Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://knnpacipzzyvluchbykb.supabase.co';
@@ -48,7 +48,7 @@ export default function LoginPage() {
         
         // 登录成功，跳转回首页 (Dashboard)
         router.push('/');
-        router.refresh(); // 刷新以触发 middleware 放行
+        router.refresh(); 
         
       } else {
         // ----------------- 注册逻辑 -----------------
@@ -59,14 +59,13 @@ export default function LoginPage() {
             data: {
               full_name: formData.fullName,
               phone: formData.phone,
-              role: 'coach', // 默认分配教练角色
+              role: 'coach', 
             }
           }
         });
 
         if (error) throw error;
 
-        // 注册成功提示 (有时候 Supabase 需要邮箱验证，这里做个兼容提示)
         setSuccessMsg('Account created successfully! Logging you in...');
         setTimeout(() => {
           router.push('/');
@@ -93,9 +92,17 @@ export default function LoginPage() {
         {/* Logo 与欢迎语 */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-white rounded-2xl shadow-md flex items-center justify-center mx-auto mb-4">
-            <ShieldCheck size={32} className="text-blue-600" />
+            {/* 🏀 专属篮球 SVG 图标 */}
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-orange-500">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M2 12h20" />
+              <path d="M12 2v20" />
+              <path d="M4.93 4.93A10 10 0 0 1 9.9 12a10 10 0 0 1-4.97 7.07" />
+              <path d="M19.07 19.07A10 10 0 0 1 14.1 12a10 10 0 0 1 4.97-7.07" />
+            </svg>
           </div>
-          <h1 className="text-3xl font-black text-white">Move Academy</h1>
+          {/* 📝 标题修改 */}
+          <h1 className="text-3xl font-black text-white">Basketball Academy</h1>
           <p className="text-blue-100 font-medium mt-1">Operating System</p>
         </div>
 
@@ -209,7 +216,7 @@ export default function LoginPage() {
         </div>
         
         <p className="text-center text-xs font-bold text-gray-400 mt-8">
-          &copy; {new Date().getFullYear()} Move Academy Management PWA
+          &copy; {new Date().getFullYear()} Basketball Academy Management PWA
         </p>
       </div>
     </div>
