@@ -1,180 +1,216 @@
 'use client';
 
 import { useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
-import { ShieldCheck, Mail, Lock, ArrowRight, Loader2, Play, Eye, EyeOff } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
+import { Mail, Lock, User, Phone, ArrowRight, Loader2, ShieldCheck } from 'lucide-react';
 
+// 初始化 Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://knnpacipzzyvluchbykb.supabase.co';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtubnBhY2lwenp5dmx1Y2hieWtiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczODM2NjYsImV4cCI6MjEwMjk1OTY2Nn0.NnP85JAAv5KP-8_iWpEkgG_D9dwlbB68-mh-x6clNFA';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [academyName, setAcademyName] = useState('');
-  const [isLogin, setIsLogin] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-  
-  // 新增状态：控制密码是否可见
-  const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
+  const [isLogin, setIsLogin] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
 
-  // 核心业务逻辑：强密码校验规则
-  const validatePassword = (pwd: string) => {
-    // 至少8个字符，包含至少一个大写字母、一个数字和一个特殊字符
-    const strongPasswordRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-    return strongPasswordRegex.test(pwd);
+  // 表单状态
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    fullName: '',
+    phone: ''
+  });
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setErrorMsg(''); // 用户输入时清空报错
   };
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setIsLoading(true);
     setErrorMsg('');
+    setSuccessMsg('');
 
     try {
       if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        // ----------------- 登录逻辑 -----------------
+        const { error } = await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.password,
+        });
+
         if (error) throw error;
-        router.push('/');
-      } else {
-        // 注册前的业务逻辑拦截
-        if (!academyName.trim()) throw new Error('Academy Name is required.');
         
-        // 密码强度校验 (仅在注册时拦截)
-        if (!validatePassword(password)) {
-          throw new Error('Password must be at least 8 characters, include an uppercase letter, a number, and a special symbol (e.g. @, $, !, %, *, ?, &).');
-        }
+        // 登录成功，跳转回首页 (Dashboard)
+        router.push('/');
+        router.refresh(); // 刷新以触发 middleware 放行
+        
+      } else {
+        // ----------------- 注册逻辑 -----------------
+        const { error } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            data: {
+              full_name: formData.fullName,
+              phone: formData.phone,
+              role: 'coach', // 默认分配教练角色
+            }
+          }
+        });
 
-        const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
-        if (authError) throw authError;
+        if (error) throw error;
 
-        if (authData.user) {
-          const { data: academyData, error: acError } = await supabase
-            .from('academies')
-            .insert([{ name: academyName }])
-            .select()
-            .single();
-          if (acError) throw acError;
-
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .insert([{ id: authData.user.id, academy_id: academyData.id, role: 'ADMIN' }]);
-          if (profileError) throw profileError;
-
+        // 注册成功提示 (有时候 Supabase 需要邮箱验证，这里做个兼容提示)
+        setSuccessMsg('Account created successfully! Logging you in...');
+        setTimeout(() => {
           router.push('/');
-        }
+          router.refresh();
+        }, 1500);
       }
     } catch (error: any) {
+      console.error('Auth error:', error);
       setErrorMsg(error.message || 'Authentication failed. Please try again.');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col justify-center items-center p-6 relative overflow-hidden antialiased">
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-        <div className="absolute -top-[20%] -left-[10%] w-[70vw] h-[70vw] bg-blue-600/20 rounded-full blur-[120px] mix-blend-screen"></div>
-        <div className="absolute bottom-[-10%] right-[-20%] w-[60vw] h-[60vw] bg-neutral-800/80 rounded-full blur-[100px] mix-blend-screen"></div>
+    <div className="min-h-[100dvh] bg-gray-50 flex flex-col justify-center px-6 py-12 relative overflow-hidden">
+      
+      {/* 顶部背景装饰 */}
+      <div className="absolute top-0 left-0 w-full h-64 bg-blue-600 rounded-b-[3rem] shadow-lg pointer-events-none">
+        <div className="absolute inset-0 bg-blue-700/20 mix-blend-multiply"></div>
       </div>
 
-      <div className="w-full max-w-sm relative z-10 animate-in fade-in slide-in-from-bottom-8 duration-700">
-        <div className="mb-12 text-center">
-          <div className="bg-white text-black w-16 h-16 rounded-3xl mx-auto flex items-center justify-center mb-6 shadow-2xl">
-            <Play size={28} className="ml-1" fill="currentColor" />
+      <div className="relative z-10 w-full max-w-md mx-auto">
+        {/* Logo 与欢迎语 */}
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 bg-white rounded-2xl shadow-md flex items-center justify-center mx-auto mb-4">
+            <ShieldCheck size={32} className="text-blue-600" />
           </div>
-          <h1 className="text-4xl font-black tracking-tighter mb-2">Hoop OS.</h1>
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">Academy Management</p>
+          <h1 className="text-3xl font-black text-white">Move Academy</h1>
+          <p className="text-blue-100 font-medium mt-1">Operating System</p>
         </div>
 
-        <form onSubmit={handleAuth} className="space-y-4">
-          {!isLogin && (
-            <div className="animate-in fade-in slide-in-from-top-2">
-              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Academy Name</label>
-              <div className="relative">
-                <ShieldCheck size={18} className="absolute left-4 top-4 text-gray-500" />
-                <input 
-                  type="text" 
-                  value={academyName} 
-                  onChange={(e) => setAcademyName(e.target.value)} 
-                  required={!isLogin}
-                  placeholder="e.g. Elite Hoops Academy" 
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-4 py-4 text-[16px] font-bold text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-white/50 backdrop-blur-sm transition-all" 
-                />
-              </div>
-            </div>
-          )}
-
-          <div>
-            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Email Address</label>
-            <div className="relative">
-              <Mail size={18} className="absolute left-4 top-4 text-gray-500" />
-              <input 
-                type="email" 
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)} 
-                required 
-                placeholder="coach@academy.com" 
-                className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-4 py-4 text-[16px] font-bold text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-white/50 backdrop-blur-sm transition-all" 
-              />
-            </div>
-          </div>
-
-          {/* 🚀 UI 结构优化：带眼睛开关的密码输入框 */}
-          <div>
-            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Password</label>
-            <div className="relative">
-              <Lock size={18} className="absolute left-4 top-4 text-gray-500" />
-              <input 
-                type={showPassword ? "text" : "password"} 
-                value={password} 
-                onChange={(e) => setPassword(e.target.value)} 
-                required 
-                placeholder="••••••••" 
-                className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-12 py-4 text-[16px] font-bold text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-white/50 backdrop-blur-sm transition-all" 
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-4 text-gray-500 hover:text-white transition-colors"
-                title={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </div>
+        {/* 登录/注册表单卡片 */}
+        <div className="bg-white rounded-[2rem] shadow-xl p-8 border border-gray-100 animate-in fade-in slide-in-from-bottom-4">
+          <h2 className="text-2xl font-black text-gray-900 mb-6">
+            {isLogin ? 'Welcome Back' : 'Create Account'}
+          </h2>
 
           {errorMsg && (
-            <div className="bg-red-500/10 border border-red-500/30 p-4 rounded-2xl text-center animate-in fade-in mt-2">
-              <p className="text-[12px] font-bold text-red-400">{errorMsg}</p>
+            <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm font-bold mb-6 border border-red-100 flex items-start">
+              <span className="shrink-0 mr-2 mt-0.5">⚠️</span>
+              {errorMsg}
             </div>
           )}
 
-          <button 
-            type="submit" 
-            disabled={loading} 
-            className="w-full bg-white hover:bg-gray-200 text-black font-black text-[15px] uppercase tracking-wide py-4 rounded-full mt-6 active:scale-95 transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
-          >
-            {loading ? <Loader2 size={20} className="animate-spin text-black" /> : (
+          {successMsg && (
+            <div className="bg-green-50 text-green-600 p-4 rounded-xl text-sm font-bold mb-6 border border-green-100 flex items-start">
+              <span className="shrink-0 mr-2 mt-0.5">✅</span>
+              {successMsg}
+            </div>
+          )}
+
+          <form onSubmit={handleAuth} className="space-y-4">
+            {!isLogin && (
               <>
-                <span>{isLogin ? 'Sign In' : 'Create Account'}</span>
-                <ArrowRight size={18} />
+                <div className="relative">
+                  <User size={18} className="absolute left-4 top-4 text-gray-400" />
+                  <input
+                    type="text"
+                    name="fullName"
+                    required
+                    placeholder="Full Name"
+                    value={formData.fullName}
+                    onChange={handleChange}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-2xl pl-11 pr-4 py-3.5 text-[15px] font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="relative">
+                  <Phone size={18} className="absolute left-4 top-4 text-gray-400" />
+                  <input
+                    type="tel"
+                    name="phone"
+                    placeholder="Phone Number"
+                    value={formData.phone}
+                    onChange={handleChange}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-2xl pl-11 pr-4 py-3.5 text-[15px] font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </>
             )}
-          </button>
-        </form>
 
-        <div className="mt-8 text-center">
-          <button 
-            type="button" 
-            onClick={() => { setIsLogin(!isLogin); setErrorMsg(''); }} 
-            className="text-[12px] font-bold text-gray-500 hover:text-white transition-colors"
-          >
-            {isLogin ? "New to Hoop OS? Create an account" : "Already have an account? Sign in"}
-          </button>
+            <div className="relative">
+              <Mail size={18} className="absolute left-4 top-4 text-gray-400" />
+              <input
+                type="email"
+                name="email"
+                required
+                placeholder="Email Address"
+                value={formData.email}
+                onChange={handleChange}
+                className="w-full bg-gray-50 border border-gray-200 rounded-2xl pl-11 pr-4 py-3.5 text-[15px] font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="relative">
+              <Lock size={18} className="absolute left-4 top-4 text-gray-400" />
+              <input
+                type="password"
+                name="password"
+                required
+                placeholder="Password"
+                value={formData.password}
+                onChange={handleChange}
+                className="w-full bg-gray-50 border border-gray-200 rounded-2xl pl-11 pr-4 py-3.5 text-[15px] font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-blue-600 text-white font-black text-lg py-4 rounded-2xl mt-4 flex items-center justify-center active:bg-blue-700 active:scale-[0.98] transition-all shadow-[0_8px_20px_-8px_rgba(37,99,235,0.5)] disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {isLoading ? (
+                <Loader2 size={24} className="animate-spin" />
+              ) : (
+                <>
+                  <span>{isLogin ? 'Sign In' : 'Sign Up'}</span>
+                  <ArrowRight size={20} className="ml-2" />
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* 切换登录/注册 */}
+          <div className="mt-8 text-center">
+            <p className="text-sm font-bold text-gray-500">
+              {isLogin ? "Don't have an account?" : "Already have an account?"}
+              <button
+                onClick={() => {
+                  setIsLogin(!isLogin);
+                  setErrorMsg('');
+                  setFormData({ email: '', password: '', fullName: '', phone: '' });
+                }}
+                className="ml-2 text-blue-600 hover:text-blue-700 active:text-blue-800 transition-colors"
+              >
+                {isLogin ? 'Create one' : 'Sign in here'}
+              </button>
+            </p>
+          </div>
         </div>
+        
+        <p className="text-center text-xs font-bold text-gray-400 mt-8">
+          &copy; {new Date().getFullYear()} Move Academy Management PWA
+        </p>
       </div>
     </div>
   );
